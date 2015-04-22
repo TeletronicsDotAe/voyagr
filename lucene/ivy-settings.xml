@@ -55,6 +55,7 @@
 
     <chain name="default" returnFirst="true" checkmodified="true" changingPattern=".*SNAPSHOT">
       <resolver ref="local"/>
+      <resolver ref="local-artifactory" />
       <!-- <resolver ref="local-maven-2" /> -->
       <resolver ref="main"/>
       <resolver ref="maven.restlet.org" />
