@@ -31,6 +31,8 @@ parent.iml
 **/pom.xml
 /nbproject
 /nb-build
+**/target
+**/*.iml
 
 /solr/package
 
