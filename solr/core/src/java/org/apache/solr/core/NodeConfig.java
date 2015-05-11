@@ -17,6 +17,7 @@ package org.apache.solr.core;
  * limitations under the License.
  */
 
+import org.apache.lucene.uninverting.FieldCache;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.logging.LogWatcherConfig;
 import org.apache.solr.update.UpdateShardHandlerConfig;
@@ -51,16 +52,21 @@ public class NodeConfig {
   private final int coreLoadThreads;
 
   private final int transientCacheSize;
-
+  
   private final boolean useSchemaCache;
 
   private final String managementPath;
+  
+  private final PluginInfo recentlyLookedUpOrUpdatedDocumentsCachePluginInfo;
+  
+  private final FieldCache fieldCache;
 
   private NodeConfig(String nodeName, String coreRootDirectory, String configSetBaseDirectory, String sharedLibDirectory,
                      PluginInfo shardHandlerFactoryConfig, UpdateShardHandlerConfig updateShardHandlerConfig,
                      String coreAdminHandlerClass, String collectionsAdminHandlerClass, String infoHandlerClass,
                      LogWatcherConfig logWatcherConfig, CloudConfig cloudConfig, int coreLoadThreads,
                      int transientCacheSize, boolean useSchemaCache, String managementPath,
+                     PluginInfo recentlyLookedUpOrUpdatedDocumentsCachePluginInfo, FieldCache fieldCache,
                      SolrResourceLoader loader, Properties solrProperties) {
     this.nodeName = nodeName;
     this.coreRootDirectory = coreRootDirectory;
@@ -77,6 +83,8 @@ public class NodeConfig {
     this.transientCacheSize = transientCacheSize;
     this.useSchemaCache = useSchemaCache;
     this.managementPath = managementPath;
+    this.recentlyLookedUpOrUpdatedDocumentsCachePluginInfo = recentlyLookedUpOrUpdatedDocumentsCachePluginInfo;
+    this.fieldCache = fieldCache;
     this.loader = loader;
     this.solrProperties = solrProperties;
 
@@ -165,6 +173,14 @@ public class NodeConfig {
   public int getTransientCacheSize() {
     return transientCacheSize;
   }
+  
+  public PluginInfo getRecentlyLookedUpOrUpdatedDocumentsCachePluginInfo() {
+    return recentlyLookedUpOrUpdatedDocumentsCachePluginInfo;
+  }
+  
+  public FieldCache getFieldCache() {
+    return fieldCache;
+  }
 
   protected final SolrResourceLoader loader;
   protected final Properties solrProperties;
@@ -176,7 +192,7 @@ public class NodeConfig {
   public SolrResourceLoader getSolrResourceLoader() {
     return loader;
   }
-
+  
   public static class NodeConfigBuilder {
 
     private String coreRootDirectory = "";
@@ -193,6 +209,8 @@ public class NodeConfig {
     private int transientCacheSize = DEFAULT_TRANSIENT_CACHE_SIZE;
     private boolean useSchemaCache = false;
     private String managementPath;
+    private PluginInfo recentlyLookedUpOrUpdatedDocumentsCachePluginInfo;
+    private FieldCache fieldCache;
     private Properties solrProperties = new Properties();
 
     private final SolrResourceLoader loader;
@@ -281,6 +299,16 @@ public class NodeConfig {
       this.managementPath = managementPath;
       return this;
     }
+    
+    public NodeConfigBuilder setRecentlyLookedUpOrUpdatedDocumentsCachePluginInfo(PluginInfo recentlyLookedUpOrUpdatedDocumentsCachePluginInfo) {
+      this.recentlyLookedUpOrUpdatedDocumentsCachePluginInfo = recentlyLookedUpOrUpdatedDocumentsCachePluginInfo;
+      return this;
+    }
+    
+    public NodeConfigBuilder setFieldCache(FieldCache fieldCache) {
+      this.fieldCache = fieldCache;
+      return this;
+    }
 
     public NodeConfigBuilder setSolrProperties(Properties solrProperties) {
       this.solrProperties = solrProperties;
@@ -290,7 +318,8 @@ public class NodeConfig {
     public NodeConfig build() {
       return new NodeConfig(nodeName, coreRootDirectory, configSetBaseDirectory, sharedLibDirectory, shardHandlerFactoryConfig,
                             updateShardHandlerConfig, coreAdminHandlerClass, collectionsAdminHandlerClass, infoHandlerClass,
-                            logWatcherConfig, cloudConfig, coreLoadThreads, transientCacheSize, useSchemaCache, managementPath, loader, solrProperties);
+                            logWatcherConfig, cloudConfig, coreLoadThreads, transientCacheSize, useSchemaCache, managementPath,
+                            recentlyLookedUpOrUpdatedDocumentsCachePluginInfo, fieldCache, loader, solrProperties);
     }
   }
 }

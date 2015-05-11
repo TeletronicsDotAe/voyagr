@@ -196,13 +196,13 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
                                                SolrQueryRequest req, 
                                                SolrQueryResponse rsp, 
                                                UpdateRequestProcessor next ) {
-      super(next);
+      super(next, req, rsp);
       this.ignoreOldUpdates = ignoreOldUpdates;
       this.deleteVersionParamName = deleteVersionParamName;
       this.core = req.getCore();
       this.versionFieldName = versionField;
       this.userVersionField = core.getLatestSchema().getField(versionField);
-      this.solrVersionField = core.getLatestSchema().getField(VersionInfo.VERSION_FIELD);
+      this.solrVersionField = core.getLatestSchema().getField(SolrInputDocument.VERSION_FIELD);
       this.useFieldCache = useFieldCache;
 
       for (UpdateRequestProcessor proc = next ;proc != null; proc = proc.next) {
@@ -261,7 +261,7 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
       SolrInputDocument oldDoc = null;
 
       if (useFieldCache) {
-        oldDoc = RealTimeGetComponent.getInputDocumentFromTlog(core, indexedDocId);
+        oldDoc = RealTimeGetComponent.getInputDocumentFromTlog(core, indexedDocId, null /* TODO */);
         if (oldDoc == RealTimeGetComponent.DELETED) {
           return true;
         }
@@ -299,7 +299,7 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
       } else {
         // stored fields only...
 
-        oldDoc = RealTimeGetComponent.getInputDocument(core, indexedDocId);
+        oldDoc = RealTimeGetComponent.getInputDocument(core, indexedDocId, null /* TODO */);
 
         if (null == oldDoc) {
           // log.info("VERSION no doc found, returning true");

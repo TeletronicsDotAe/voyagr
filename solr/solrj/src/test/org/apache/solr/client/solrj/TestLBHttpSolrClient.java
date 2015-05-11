@@ -317,7 +317,7 @@ public class TestLBHttpSolrClient extends SolrTestCaseJ4 {
 
       JettyConfig jettyConfig = JettyConfig.builder(buildJettyConfig("/solr")).setPort(port).build();
 
-      jetty = new JettySolrRunner(getHomeDir(), props, jettyConfig);
+      jetty = new JettySolrRunner(getHomeDir(), props, jettyConfig, false);
       jetty.start();
       int newPort = jetty.getLocalPort();
       if (port != 0 && newPort != port) {

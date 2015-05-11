@@ -25,9 +25,12 @@ import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 import org.apache.solr.client.solrj.impl.HttpClientUtil;
+import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.security.AuthCredentials;
 
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
@@ -43,9 +46,17 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   private RESTfulServerProvider serverProvider;
   private CloseableHttpClient httpClient = HttpClientUtil.createClient(new
       ModifiableSolrParams());
+  private AuthCredentials authCredentials;
   
   public RestTestHarness(RESTfulServerProvider serverProvider) {
+    this(serverProvider, null, null);
+  }
+  
+  public RestTestHarness(RESTfulServerProvider serverProvider, String username, String password) {
     this.serverProvider = serverProvider;
+    if (username != null && password != null) {
+      authCredentials = AuthCredentials.createBasicAuthCredentials(username, password);
+    }
   }
   
   public String getBaseURL() {
@@ -205,7 +216,8 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   private String getResponse(HttpUriRequest request) throws IOException {
     HttpEntity entity = null;
     try {
-      entity = httpClient.execute(request).getEntity();
+      final HttpContext context = HttpSolrClient.getHttpContext(authCredentials, false, getBaseURL());
+      entity = httpClient.execute(request, context).getEntity();
       return EntityUtils.toString(entity, StandardCharsets.UTF_8);
     } finally {
       EntityUtils.consumeQuietly(entity);

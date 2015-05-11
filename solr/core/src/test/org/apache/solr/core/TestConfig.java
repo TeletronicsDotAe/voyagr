@@ -20,7 +20,9 @@ package org.apache.solr.core;
 import org.apache.lucene.index.ConcurrentMergeScheduler;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.TieredMergePolicy;
+import org.apache.lucene.uninverting.FieldCacheContainer;
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.core.mocks.NullFieldCache;
 import org.apache.solr.handler.admin.ShowFileRequestHandler;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.IndexSchemaFactory;
@@ -31,6 +33,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.xpath.XPathConstants;
+
 import java.io.IOException;
 import java.io.InputStream;
 

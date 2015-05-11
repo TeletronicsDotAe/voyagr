@@ -87,7 +87,7 @@ public class IgnoreCommitOptimizeUpdateProcessorFactory extends UpdateRequestPro
 
   @Override
   public UpdateRequestProcessor getInstance(SolrQueryRequest req, SolrQueryResponse rsp, UpdateRequestProcessor next) {
-    return new IgnoreCommitOptimizeUpdateProcessor(rsp, this, next);
+    return new IgnoreCommitOptimizeUpdateProcessor(req, rsp, this, next);
   }
 }
 
@@ -98,11 +98,12 @@ class IgnoreCommitOptimizeUpdateProcessor extends UpdateRequestProcessor {
   private final String responseMsg;
   private final boolean ignoreOptimizeOnly;
 
-  IgnoreCommitOptimizeUpdateProcessor(SolrQueryResponse rsp,
+  IgnoreCommitOptimizeUpdateProcessor(SolrQueryRequest req, 
+                                      SolrQueryResponse rsp,
                                       IgnoreCommitOptimizeUpdateProcessorFactory factory,
                                       UpdateRequestProcessor next)
   {
-    super(next);
+    super(next, req, rsp);
     this.rsp = rsp;
     this.errorCode = factory.errorCode;
     this.responseMsg = factory.responseMsg;

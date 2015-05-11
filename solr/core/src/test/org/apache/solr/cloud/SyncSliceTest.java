@@ -43,6 +43,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 /**
  * Test sync phase that occurs when Leader goes down and a new Leader is
  * elected.
@@ -123,6 +125,7 @@ public class SyncSliceTest extends AbstractFullDistribZkTestBase {
     params.set("shard", "shard1");
     SolrRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     
     String baseUrl = ((HttpSolrClient) shardToJetty.get("shard1").get(2).client.solrClient)
         .getBaseURL();
@@ -138,7 +141,7 @@ public class SyncSliceTest extends AbstractFullDistribZkTestBase {
     
     checkShardConsistency(false, true);
     
-    long cloudClientDocs = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
+    long cloudClientDocs = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(4, cloudClientDocs);
     
     
@@ -167,7 +170,7 @@ public class SyncSliceTest extends AbstractFullDistribZkTestBase {
     
     checkShardConsistency(false, true);
     
-    cloudClientDocs = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
+    cloudClientDocs = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(5, cloudClientDocs);
     
     CloudJettyRunner deadJetty = leaderJetty;
@@ -309,7 +312,7 @@ public class SyncSliceTest extends AbstractFullDistribZkTestBase {
     addFields(doc, fields);
     addFields(doc, "rnd_b", true);
     
-    controlClient.add(doc);
+    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
     
     UpdateRequest ureq = new UpdateRequest();
     ureq.add(doc);
@@ -318,6 +321,7 @@ public class SyncSliceTest extends AbstractFullDistribZkTestBase {
       params.add("test.distrib.skip.servers", skip.url + "/");
     }
     ureq.setParams(params);
+    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     ureq.process(cloudClient);
   }
   

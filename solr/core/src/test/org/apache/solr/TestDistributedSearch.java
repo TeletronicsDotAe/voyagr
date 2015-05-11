@@ -57,6 +57,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.EnumSet;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 /**
  * TODO? perhaps use:
  *  http://docs.codehaus.org/display/JETTY/ServletTester
@@ -1005,7 +1007,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     }
     // TODO: look into why passing true causes fails
     params.set("distrib", "false");
-    final QueryResponse controlRsp = controlClient.query(params);
+    final QueryResponse controlRsp = controlClient.query(params, SEARCH_CREDENTIALS);
     // if time.allowed is specified then even a control response can return a partialResults header
     if (params.get(CommonParams.TIME_ALLOWED) == null)  {
       validateControlData(controlRsp);
@@ -1029,7 +1031,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
               int which = r.nextInt(upClients.size());
               SolrClient client = upClients.get(which);
               try {
-                QueryResponse rsp = client.query(new ModifiableSolrParams(params));
+                QueryResponse rsp = client.query(new ModifiableSolrParams(params), SEARCH_CREDENTIALS);
                 if (verifyStress) {
                   comparePartialResponses(rsp, controlRsp, upShards);
                 }
@@ -1052,7 +1054,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     // query a random "up" server
     int which = r.nextInt(upClients.size());
     SolrClient client = upClients.get(which);
-    QueryResponse rsp = client.query(params);
+    QueryResponse rsp = client.query(params, SEARCH_CREDENTIALS);
     return rsp;
   }
 

@@ -77,7 +77,7 @@ public class TestArbitraryIndexDir extends AbstractSolrTestCase{
     h = new TestHarness( tmpDataDir.getAbsolutePath(),
         solrConfig,
         "schema12.xml");
-    lrf = h.getRequestFactory
+    lrf = h.getRequestInfoFactory
     ("standard",0,20,CommonParams.VERSION,"2.2");
   }
   

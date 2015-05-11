@@ -374,7 +374,8 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
   protected List<SubmitCapture> mockShardHandlerForCreateJob(
       Integer numberOfSlices, Integer numberOfReplica) {
     List<SubmitCapture> submitCaptures = new ArrayList<>();
-    for (int i = 0; i < (numberOfSlices * numberOfReplica); i++) {
+    for (int i = 1; i <= numberOfSlices; i++) {
+      for (int j = 1; j <= numberOfReplica; j++) {
       SubmitCapture submitCapture = new SubmitCapture();
       shardHandlerMock.submit(capture(submitCapture.shardRequestCapture),
           capture(submitCapture.nodeUrlsWithoutProtocolPartCapture),
@@ -382,9 +383,17 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
       expectLastCall();
       submitCaptures.add(submitCapture);
       ShardResponse shardResponseWithoutException = new ShardResponse();
+        ShardRequest shardRequest = new ShardRequest();
+        ModifiableSolrParams params = new ModifiableSolrParams();
+        String sliceName = "shard" + i;
+        String shardName = COLLECTION_NAME + "_" + sliceName + "_replica" + j;
+        params.add(CoreAdminParams.NAME, shardName);
+        shardRequest.params = params;
+        shardResponseWithoutException.setShardRequest(shardRequest);
       shardResponseWithoutException.setSolrResponse(new QueryResponse());
       expect(shardHandlerMock.takeCompletedOrError()).andReturn(
           shardResponseWithoutException);
+    }
     }
     expect(shardHandlerMock.takeCompletedOrError()).andReturn(null);
     return submitCaptures;
@@ -412,7 +421,7 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
     QueueEvent qe = new QueueEvent("id", ZkStateReader.toJSON(props), null){
       @Override
       public void setBytes(byte[] bytes) {
-        lastProcessMessageResult = SolrResponse.deserialize( bytes);
+        lastProcessMessageResult = null; // TODO SolrResponse.deserialize( bytes);
       }
     };
     queue.add(qe);

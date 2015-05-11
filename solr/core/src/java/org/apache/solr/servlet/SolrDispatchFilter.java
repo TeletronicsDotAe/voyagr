@@ -48,7 +48,6 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CommonParams;
-import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
@@ -63,7 +62,6 @@ import org.apache.solr.core.SolrXmlConfig;
 import org.apache.solr.handler.ContentStreamHandlerBase;
 import org.apache.solr.logging.MDCUtils;
 import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.request.SolrQueryRequestBase;
 import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.QueryResponseWriter;
@@ -73,6 +71,7 @@ import org.apache.solr.servlet.cache.HttpCacheHeaderUtil;
 import org.apache.solr.servlet.cache.Method;
 import org.apache.solr.update.processor.DistributingUpdateProcessorFactory;
 import org.apache.solr.util.RTimer;
+import org.apache.solr.update.statistics.StatisticsAndPrimitiveProfilingHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import javax.servlet.FilterChain;
@@ -119,6 +118,9 @@ public class SolrDispatchFilter extends BaseSolrFilter {
   protected String abortErrorMessage = null;
   protected final CloseableHttpClient httpClient = HttpClientUtil.createClient(new ModifiableSolrParams());
   
+  private static final String STATS_AND_PRIM_PROF_AUTO_LOGGING_SYS_PROP = "STATS_AND_PRIM_PROF_AUTO_LOGGING";
+  public static final StatisticsAndPrimitiveProfilingHandler statsAndPrimProfHandler = new StatisticsAndPrimitiveProfilingHandler(true);
+
   public SolrDispatchFilter() {
   }
 
@@ -146,6 +148,7 @@ public class SolrDispatchFilter extends BaseSolrFilter {
       this.cores = createCoreContainer(solrHome, extraProperties);
 
       log.info("user.dir=" + System.getProperty("user.dir"));
+      if (Boolean.getBoolean(STATS_AND_PRIM_PROF_AUTO_LOGGING_SYS_PROP)) statsAndPrimProfHandler.startAutomatiLogging();
     }
     catch( Throwable t ) {
       // catch this so our filter still works
@@ -210,6 +213,7 @@ public class SolrDispatchFilter extends BaseSolrFilter {
         cores.shutdown();
         cores = null;
       }
+      statsAndPrimProfHandler.stopAutomatiLogging();
     } finally {
       IOUtils.closeQuietly(httpClient);
     }
@@ -224,12 +228,12 @@ public class SolrDispatchFilter extends BaseSolrFilter {
     MDCUtils.clearMDC();
 
     if (abortErrorMessage != null) {
-      sendError((HttpServletResponse) response, 500, abortErrorMessage);
+      ResponseUtils.sendError((HttpServletResponse) response, 500, abortErrorMessage);
       return;
     }
 
     if (this.cores == null) {
-      sendError((HttpServletResponse) response, 503, "Server is shutting down or failed to initialize");
+      ResponseUtils.sendError((HttpServletResponse) response, 503, "Server is shutting down or failed to initialize");
       return;
     }
 
@@ -793,32 +797,7 @@ public class SolrDispatchFilter extends BaseSolrFilter {
   private void writeResponse(SolrQueryResponse solrRsp, ServletResponse response,
                              QueryResponseWriter responseWriter, SolrQueryRequest solrReq, Method reqMethod)
           throws IOException {
-    try {
-      Object invalidStates = solrReq.getContext().get(CloudSolrClient.STATE_VERSION);
-      //This is the last item added to the response and the client would expect it that way.
-      //If that assumption is changed , it would fail. This is done to avoid an O(n) scan on
-      // the response for each request
-      if(invalidStates != null) solrRsp.add(CloudSolrClient.STATE_VERSION, invalidStates);
-      // Now write it out
-      final String ct = responseWriter.getContentType(solrReq, solrRsp);
-      // don't call setContentType on null
-      if (null != ct) response.setContentType(ct);
-
-      if (solrRsp.getException() != null) {
-        NamedList info = new SimpleOrderedMap();
-        int code = ResponseUtils.getErrorInfo(solrRsp.getException(), info, log);
-        solrRsp.add("error", info);
-        ((HttpServletResponse) response).setStatus(code);
-      }
-
-      if (Method.HEAD != reqMethod) {
-        QueryResponseWriterUtil.writeQueryResponse(response.getOutputStream(), responseWriter, solrReq, solrRsp, ct);
-      }
-      //else http HEAD request, nothing to write out, waited this long just to get ContentType
-    }
-    catch (EOFException e) {
-      log.info("Unable to write response, client closed connection or we are shutting down", e);
-    }
+    ResponseUtils.writeResponse(solrRsp, response, responseWriter, solrReq, reqMethod);
   }
   
   protected void execute( HttpServletRequest req, SolrRequestHandler handler, SolrQueryRequest sreq, SolrQueryResponse rsp) {
@@ -829,64 +808,12 @@ public class SolrDispatchFilter extends BaseSolrFilter {
     sreq.getCore().execute( handler, sreq, rsp );
   }
 
-  private void sendError(HttpServletResponse response, int code, String message) throws IOException {
-    try {
-      response.sendError(code, message);
-    }
-    catch (EOFException e) {
-      log.info("Unable to write error response, client closed connection or we are shutting down", e);
-    }
-  }
-
   protected void sendError(SolrCore core,
       SolrQueryRequest req, 
       ServletRequest request, 
       HttpServletResponse response, 
       Throwable ex) throws IOException {
-    Exception exp = null;
-    SolrCore localCore = null;
-    try {
-      SolrQueryResponse solrResp = new SolrQueryResponse();
-      if(ex instanceof Exception) {
-        solrResp.setException((Exception)ex);
-      }
-      else {
-        solrResp.setException(new RuntimeException(ex));
-      }
-      if(core==null) {
-        localCore = cores.getCore(""); // default core
-      } else {
-        localCore = core;
-      }
-      if(req==null) {
-        final SolrParams solrParams;
-        if (request instanceof HttpServletRequest) {
-          // use GET parameters if available:
-          solrParams = SolrRequestParsers.parseQueryString(((HttpServletRequest) request).getQueryString());
-        } else {
-          // we have no params at all, use empty ones:
-          solrParams = new MapSolrParams(Collections.<String,String>emptyMap());
-        }
-        req = new SolrQueryRequestBase(core, solrParams) {};
-      }
-      QueryResponseWriter writer = core.getQueryResponseWriter(req);
-      writeResponse(solrResp, response, writer, req, Method.GET);
-    }
-    catch (Exception e) { // This error really does not matter
-         exp = e;
-    } finally {
-      try {
-        if (exp != null) {
-          SimpleOrderedMap info = new SimpleOrderedMap();
-          int code = ResponseUtils.getErrorInfo(ex, info, log);
-          sendError(response, code, info.toString());
-        }
-      } finally {
-        if (core == null && localCore != null) {
-          localCore.close();
-        }
-      }
-   }
+    ResponseUtils.sendError(response, ex, null);
   }
 
   //---------------------------------------------------------------------

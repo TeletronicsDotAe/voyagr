@@ -42,6 +42,7 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.cloud.ZooKeeperException;
+import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.params.SolrParams;
@@ -933,6 +934,32 @@ public class CloudSolrClient extends SolrClient {
 
     return resp;
   }
+  
+  private String getRealtimeGetUrl(String collection, ClusterState clusterState, String id, String route) {
+    //Check to see if the collection is an alias.
+    Aliases aliases = zkStateReader.getAliases();
+    if(aliases != null) {
+      Map<String, String> collectionAliases = aliases.getCollectionAliasMap();
+      if(collectionAliases != null && collectionAliases.containsKey(collection)) {
+        collection = collectionAliases.get(collection);
+      }
+    }
+
+    DocCollection col = clusterState.getCollection(collection);
+
+    DocRouter router = col.getRouter();
+    
+    if (router instanceof ImplicitDocRouter) {
+      throw new SolrException(ErrorCode.PRECONDITION_FAILED, "Automatically routed realtime-get in cloud not supported for " + ImplicitDocRouter.class.getName() + " routers");
+    }
+    
+    Slice slice = router.getTargetSlice(id, null, route, null, col);
+    if (slice == null) {
+      return null;
+    }
+    
+    return slice.getLeader().getStr(ZkStateReader.BASE_URL_PROP) + "/" + slice.getLeader().getStr("core");
+  }
 
   protected NamedList<Object> sendRequest(SolrRequest request, String collection)
       throws SolrServerException, IOException {
@@ -972,6 +999,23 @@ public class CloudSolrClient extends SolrClient {
             "No collection param specified on request and no default collection has been set.");
       }
       
+      // Trying to send real-time gets directly to the node running the leader-replica of the shard where the document ought to live
+      boolean realtimeGet = reqParams.get(CommonParams.QT) != null && reqParams.get(CommonParams.QT).equals("/get") && reqParams.get("id") != null;
+      boolean realtimeGetCorrelationEntity = reqParams.get(CommonParams.QT) != null && reqParams.get(CommonParams.QT).equals("/getcorrentity") && reqParams.get("route") != null;
+      if (realtimeGet || realtimeGetCorrelationEntity) {
+        String id = null;
+        String route = null;
+        if (realtimeGet) {
+          id = reqParams.get("id");
+        } else if (realtimeGetCorrelationEntity) {
+          id = reqParams.get("route") + "!unimportant";
+          // TODO
+          // * Probably want not to use "route" as the name for route. Use UpdateRequest.ROUTE instead
+          // * Probably want to keep id null, and set route = reqParams.get(UpdateRequest.ROUTE) instead 
+        }
+        theUrlList.add(getRealtimeGetUrl(collection, clusterState, id, route));
+      } else {
+
       Set<String> collectionNames = getCollectionNames(clusterState, collection);
       if (collectionNames.size() == 0) {
         throw new SolrException(ErrorCode.BAD_REQUEST,
@@ -1061,6 +1105,7 @@ public class CloudSolrClient extends SolrClient {
         theUrlList.addAll(theReplicas);
       }
       
+    }
     }
 
     LBHttpSolrClient.Req req = new LBHttpSolrClient.Req(request, theUrlList);

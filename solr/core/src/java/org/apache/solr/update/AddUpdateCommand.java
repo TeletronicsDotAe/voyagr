@@ -31,11 +31,12 @@ import org.apache.solr.common.SolrInputField;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
+import org.apache.solr.update.UpdateSemanticsMode.RequestCommandType;
 
 /**
  *
  */
-public class AddUpdateCommand extends UpdateCommand implements Iterable<Document> {
+public class AddUpdateCommand extends UpdateCommand implements Iterable<Document>, UpdateSemanticsMode.RequestCommand {
    // optional id in "internal" indexed form... if it is needed and not supplied,
    // it will be obtained from the doc.
    private BytesRef indexedId;
@@ -44,7 +45,7 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
    // to index.
    public SolrInputDocument solrDoc;
 
-   public boolean overwrite = true;
+   public boolean classicOverwrite = true;
    
    public Term updateTerm;
 
@@ -65,6 +66,7 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
      indexedId = null;
      updateTerm = null;
      version = 0;
+     requestVersion = 0;
    }
 
    public SolrInputDocument getSolrInputDocument() {
@@ -89,7 +91,7 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
 
            int count = field==null ? 0 : field.getValueCount();
            if (count == 0) {
-             if (overwrite) {
+             if (req.getCore().getUpdateHandler().requireUniqueKeyFieldInDocument(this)) {
                throw new SolrException( SolrException.ErrorCode.BAD_REQUEST,"Document is missing mandatory uniqueKey field: " + sf.getName());
              }
            } else if (count  > 1) {
@@ -105,11 +107,11 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
      return indexedId;
    }
 
-   public void setIndexedId(BytesRef indexedId) {
-     this.indexedId = indexedId;
+   public String getPrintableId() {
+  	 return getPrintableId("(null)");
    }
 
-   public String getPrintableId() {
+   public String getPrintableId(String nullValue) {
     if (req != null) {
       IndexSchema schema = req.getSchema();
       SchemaField sf = schema.getUniqueKeyField();
@@ -120,7 +122,7 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
         }
       }
     }
-     return "(null)";
+     return nullValue;
    }
 
   /**
@@ -136,7 +138,7 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
         
         int count = field == null ? 0 : field.getValueCount();
         if (count == 0) {
-          if (overwrite) {
+          if (req.getCore().getUpdateHandler().requireUniqueKeyFieldInDocument(this)) {
             throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
                 "Document is missing mandatory uniqueKey field: "
                     + sf.getName());
@@ -214,11 +216,20 @@ public class AddUpdateCommand extends UpdateCommand implements Iterable<Document
   public String toString() {
      StringBuilder sb = new StringBuilder(super.toString());
      sb.append(",id=").append(getPrintableId());
-     if (!overwrite) sb.append(",overwrite=").append(overwrite);
+     if (!classicOverwrite) sb.append(",overwrite=").append(classicOverwrite);
      if (commitWithin != -1) sb.append(",commitWithin=").append(commitWithin);
      sb.append('}');
      return sb.toString();
    }
 
+  @Override
+  public boolean isClassicOverwrite() {
+    return classicOverwrite;
+  }
+
+  @Override
+  public RequestCommandType getType() {
+    return UpdateSemanticsMode.RequestCommandType.ADD;
+  }
 
 }

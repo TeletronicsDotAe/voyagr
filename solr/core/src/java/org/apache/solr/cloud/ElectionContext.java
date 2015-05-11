@@ -19,6 +19,7 @@ import org.apache.solr.logging.MDCUtils;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.update.UpdateLog;
 import org.apache.solr.util.RefCounted;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
@@ -183,7 +184,7 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
         zkController.getZkStateReader());
     this.zkController = zkController;
     this.cc = cc;
-    syncStrategy = new SyncStrategy(cc);
+    syncStrategy = new SyncStrategy(cc, AuthCredentialsSource.useInternalAuthCredentials());
   }
   
   @Override

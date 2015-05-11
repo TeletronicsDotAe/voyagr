@@ -159,7 +159,7 @@ public abstract class AbstractSolrMorphlineZkTestBase extends AbstractFullDistri
       collection = "collection1";
     props.setProperty("collection", collection);
 
-    JettySolrRunner jetty = new JettySolrRunner(solrHome.getAbsolutePath(), props, buildJettyConfig(context));
+    JettySolrRunner jetty = new JettySolrRunner(solrHome.getAbsolutePath(), props, buildJettyConfig(context), true);
     jetty.start();
     
     return jetty;

@@ -369,6 +369,7 @@ public class SolrRequestParserTest extends SolrTestCaseJ4 {
     HttpServletRequest request = getMock("/solr/select", null, -1);
     expect(request.getMethod()).andReturn("GET").anyTimes();
     expect(request.getQueryString()).andReturn("q=title:solr").anyTimes();
+    expect(request.getHeader("Authorization")).andReturn(null).anyTimes();
     Map<String, String> headers = new HashMap<>();
     headers.put("X-Forwarded-For", "10.0.0.1");
     expect(request.getHeaderNames()).andReturn(new Vector<>(headers.keySet()).elements()).anyTimes();

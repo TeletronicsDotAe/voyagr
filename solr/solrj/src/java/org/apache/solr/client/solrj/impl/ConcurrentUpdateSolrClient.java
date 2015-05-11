@@ -23,6 +23,7 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentProducer;
 import org.apache.http.entity.EntityTemplate;
+import org.apache.http.protocol.HttpContext;
 import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -31,7 +32,6 @@ import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
@@ -229,28 +229,25 @@ public class ConcurrentUpdateSolrClient extends SolrClient {
             method.setEntity(template);
             method.addHeader("User-Agent", HttpSolrClient.AGENT);
             method.addHeader("Content-Type", contentType);
+            
+            // With the kind of entity (template) we use here, authentication will not work without being preemptive (the entity cannot
+            // be re-sent so to speak). In plain HttpSolrServer, where preemptive authentication is not forced, re-send capabilities are
+            // achieved by wrapping a BufferedHttpEntity round the entity, but it cannot be done here.
+            updateRequest.setPreemptiveAuthentication(true);
+            HttpContext context = client.getHttpContextForRequest(updateRequest);
                         
-            response = client.getHttpClient().execute(method);
+            response = (context != null)?client.getHttpClient().execute(method, context):client.getHttpClient().execute(method);
             int statusCode = response.getStatusLine().getStatusCode();
             if (statusCode != HttpStatus.SC_OK) {
               StringBuilder msg = new StringBuilder();
               msg.append(response.getStatusLine().getReasonPhrase());
               msg.append("\n\n\n\n");
               msg.append("request: ").append(method.getURI());
-
-              SolrException solrExc = new SolrException(ErrorCode.getErrorCode(statusCode), msg.toString());
-              // parse out the metadata from the SolrException
-              try {
-                NamedList<Object> resp =
-                    client.parser.processResponse(response.getEntity().getContent(),
-                        response.getEntity().getContentType().getValue());
-                NamedList<Object> error = (NamedList<Object>) resp.get("error");
-                if (error != null)
-                  solrExc.setMetadata((NamedList<String>) error.get("metadata"));
-              } catch (Exception exc) {
-                // don't want to fail to report error if parsing the response fails
-                log.warn("Failed to parse error response from "+ client.getBaseURL()+" due to: "+exc);
-              }
+              
+              StringBuilder additionalMsg = new StringBuilder();
+              additionalMsg.append( "\n\n" );
+              additionalMsg.append( "request: "+method.getURI() );
+              SolrException solrExc = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), null);
 
               handleError(solrExc);
             } else {

@@ -17,6 +17,8 @@ package org.apache.solr.cloud;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
 import org.apache.http.params.CoreConnectionPNames;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrClient;
@@ -262,7 +264,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
       for (int i = 100; i <= 200; i++) {
         String shardKey = "" + (char) ('a' + (i % 26)); // See comment in ShardRoutingTest for hash distribution
 
-        collectionClient.add(getDoc(id, i, "n_ti", i, shard_fld, shardKey));
+        collectionClient.add(getDoc(id, i, "n_ti", i, shard_fld, shardKey), -1, UPDATE_CREDENTIALS);
         int idx = getHashRangeIdx(router, ranges, shardKey);
         if (idx != -1) {
           docCounts[idx]++;
@@ -274,7 +276,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
         log.info("Shard {} docCount = {}", "shard1_" + i, docCount);
       }
 
-      collectionClient.commit();
+      collectionClient.commit(UPDATE_CREDENTIALS);
 
       for (int i = 0; i < 3; i++) {
         try {
@@ -341,7 +343,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
         String shardKey = "" + (char) ('a' + (i % 26)); // See comment in ShardRoutingTest for hash distribution
 
         String idStr = shardKey + "!" + i;
-        collectionClient.add(getDoc(id, idStr, "n_ti", (shardKey + "!").equals(splitKey) ? uniqIdentifier : i));
+        collectionClient.add(getDoc(id, idStr, "n_ti", (shardKey + "!").equals(splitKey) ? uniqIdentifier : i), -1, UPDATE_CREDENTIALS);
         int idx = getHashRangeIdx(router, ranges, idStr);
         if (idx != -1) {
           docCounts[idx]++;
@@ -356,7 +358,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
       }
       log.info("Route key doc count = {}", splitKeyDocCount);
 
-      collectionClient.commit();
+      collectionClient.commit(UPDATE_CREDENTIALS);
 
       for (int i = 0; i < 3; i++) {
         try {
@@ -485,6 +487,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
     }
     SolrRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
 
     String baseUrl = ((HttpSolrClient) shardToJetty.get(SHARD1).get(0).client.solrClient)
         .getBaseURL();
@@ -507,8 +510,8 @@ public class ShardSplitTest extends BasicDistributedZkTest {
   }
 
   protected void deleteAndUpdateCount(DocRouter router, List<DocRouter.Range> ranges, int[] docCounts, String id) throws Exception {
-    controlClient.deleteById(id);
-    cloudClient.deleteById(id);
+    controlClient.deleteById(null, id, -1, UPDATE_CREDENTIALS);
+    cloudClient.deleteById(null, id, -1, UPDATE_CREDENTIALS);
 
     int idx = getHashRangeIdx(router, ranges, id);
     if (idx != -1)  {

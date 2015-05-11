@@ -89,7 +89,7 @@ public class JavabinLoader extends ContentStreamLoader {
           addCmd.commitWithin = commitWithin;
         }
         if (overwrite != null) {
-          addCmd.overwrite = overwrite;
+          addCmd.classicOverwrite = overwrite;
         }
         
         try {
@@ -116,7 +116,7 @@ public class JavabinLoader extends ContentStreamLoader {
   private AddUpdateCommand getAddCommand(SolrQueryRequest req, SolrParams params) {
     AddUpdateCommand addCmd = new AddUpdateCommand(req);
 
-    addCmd.overwrite = params.getBool(UpdateParams.OVERWRITE, true);
+    addCmd.classicOverwrite = params.getBool(UpdateParams.OVERWRITE, true);
     addCmd.commitWithin = params.getInt(UpdateParams.COMMIT_WITHIN, -1);
     return addCmd;
   }

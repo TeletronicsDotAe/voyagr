@@ -39,7 +39,7 @@ public class CustomUpdateRequestProcessorFactory extends UpdateRequestProcessorF
 
   @Override
   public UpdateRequestProcessor getInstance(SolrQueryRequest req, SolrQueryResponse rsp, UpdateRequestProcessor next) {
-    return new CustomUpdateRequestProcessor(next);
+    return new CustomUpdateRequestProcessor(next, req, rsp);
   }
 }
 

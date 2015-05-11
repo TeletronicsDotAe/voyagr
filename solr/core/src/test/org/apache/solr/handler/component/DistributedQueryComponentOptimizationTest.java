@@ -17,15 +17,23 @@ package org.apache.solr.handler.component;
  * limitations under the License.
  */
 
+import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.cloud.AbstractFullDistribZkTestBase;
 import org.apache.solr.common.params.CommonParams;
+import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
+import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.SimpleOrderedMap;
+import org.junit.Assert;
 import org.apache.solr.common.util.StrUtils;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +48,7 @@ import java.util.Set;
  * @see QueryComponent
  */
 public class DistributedQueryComponentOptimizationTest extends AbstractFullDistribZkTestBase {
+  static Logger log = LoggerFactory.getLogger(DistributedQueryComponentOptimizationTest.class);
 
   public DistributedQueryComponentOptimizationTest() {
     stress = 0;
@@ -54,6 +63,8 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
   @Test
   @ShardsFixed(num = 3)
   public void test() throws Exception {
+    // This test is explicitly testing DQA. Make sure we run with the real DefaultProvider
+    switchToOriginalDQADefaultProvider();
     waitForThingsToLevelOut(30);
     del("*:*");
 
@@ -74,52 +85,105 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
     index(id, "13", "text", "d", "test_sS", "33", "payload", ByteBuffer.wrap(new byte[]{(byte) 0x80, 0x11, 0x33}));             // 12
     commit();
 
-    QueryResponse rsp;
-    rsp = query("q", "*:*", "fl", "id,test_sS,score", "sort", "payload asc", "rows", "20");
-    assertFieldValues(rsp.getResults(), id, 7, 1, 6, 4, 2, 10, 12, 3, 5, 9, 8, 13, 11);
-    assertFieldValues(rsp.getResults(), "test_sS", "27", "21", "26", "24", "22", "30", "32", "23", "25", "29", "28", "33", "31");
-    rsp = query("q", "*:*", "fl", "id,score", "sort", "payload desc", "rows", "20");
-    assertFieldValues(rsp.getResults(), id, 11, 13, 8, 9, 5, 3, 12, 10, 2, 4, 6, 1, 7);
-    // works with just fl=id as well
-    rsp = query("q", "*:*", "fl", "id", "sort", "payload desc", "rows", "20");
-    assertFieldValues(rsp.getResults(), id, 11, 13, 8, 9, 5, 3, 12, 10, 2, 4, 6, 1, 7);
+    List<String[]> queryParamsCombinationsToTest = new ArrayList<String[]>();
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id,test_sS,score", "sort", "payload desc", "rows", "20"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id,test_sS,score", "sort", "payload asc", "rows", "20"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id,score", "sort", "payload desc", "rows", "20"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id,score", "sort", "payload asc", "rows", "20"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id", "sort", "payload desc", "rows", "20"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id", "sort", "payload asc", "rows", "20"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "score", "sort", "payload asc", "rows", "20"});
 
-    rsp = query("q", "*:*", "fl", "id,score", "sort", "payload asc", "rows", "20");
-    assertFieldValues(rsp.getResults(), id, 7, 1, 6, 4, 2, 10, 12, 3, 5, 9, 8, 13, 11);
+    for (String[] paramObjs : queryParamsCombinationsToTest) {
+      QueryResponse rsp = query(paramObjs);
+      SolrParams params = params(paramObjs);
+      if (params.get("sort").equals("payload asc") && !params.get(CommonParams.FL).equals("score")) {
+        assertFieldValues(rsp.getResults(), id, 7, 1, 6, 4, 2, 10, 12, 3, 5, 9, 8, 13, 11);
+      } else if (params.get("sort").equals("payload desc")) {
+        assertFieldValues(rsp.getResults(), id, 11, 13, 8, 9, 5, 3, 12, 10, 2, 4, 6, 1, 7);
+      }
+      if (params.get("fl").contains("test_sS")) {
+        if (params.get("sort").equals("payload asc")) {
+          assertFieldValues(rsp.getResults(), "test_sS", "27", "21", "26", "24", "22", "30", "32", "23", "25", "29", "28", "33", "31");
+        } else if (params.get("sort").equals("payload desc")) {
+          assertFieldValues(rsp.getResults(), "test_sS", "31", "33", "28", "29", "25", "23", "32", "30", "22", "24", "26", "21", "27");
+        }
+      }
+      for (ShardParams.DQA dqa : ShardParams.DQA.values()) {
+        String[] moddedParamObjs = new String[paramObjs.length + 4];
+        System.arraycopy(paramObjs, 0, moddedParamObjs, 0, paramObjs.length);
+        moddedParamObjs[moddedParamObjs.length - 4] = ShardParams.DQA.QUERY_PARAM;
+        moddedParamObjs[moddedParamObjs.length - 3] = (random().nextBoolean()) ? dqa.getId() : dqa.getAliasIds()[0];
+        moddedParamObjs[moddedParamObjs.length - 2] = "not-used";
+        moddedParamObjs[moddedParamObjs.length - 1] = "not-used";
 
-    rsp = query("q", "*:*", "fl", "id,test_sS,score", "sort", "payload asc", "rows", "20", "distrib.singlePass", "true");
-    assertFieldValues(rsp.getResults(), id, 7, 1, 6, 4, 2, 10, 12, 3, 5, 9, 8, 13, 11);
-    assertFieldValues(rsp.getResults(), "test_sS", "27", "21", "26", "24", "22", "30", "32", "23", "25", "29", "28", "33", "31");
+        queryWithAsserts(dqa, params(moddedParamObjs));
+        // QueryResponse rsp2 = query(moddedParamObjs);
+        // compareResponses(rsp, rsp2, dqa);
 
-    QueryResponse nonDistribRsp = query("q", "*:*", "fl", "id,test_sS,score", "sort", "payload asc", "rows", "20");
-    compareResponses(rsp, nonDistribRsp); // make sure distrib and distrib.singlePass return the same thing
+        moddedParamObjs[moddedParamObjs.length - 2] = ShardParams.DQA.FORCE_SKIP_GET_IDS_PARAM;
+        moddedParamObjs[moddedParamObjs.length - 1] = "true";
+        queryWithAsserts(dqa, params(moddedParamObjs));
+//        rsp2 = query(moddedParamObjs);
+//        compareResponses(rsp, rsp2, dqa);
 
-    nonDistribRsp = query("q", "*:*", "fl", "score", "sort", "payload asc", "rows", "20");
-    rsp = query("q", "*:*", "fl", "score", "sort", "payload asc", "rows", "20", "distrib.singlePass", "true");
-    compareResponses(rsp, nonDistribRsp); // make sure distrib and distrib.singlePass return the same thing
+        moddedParamObjs[moddedParamObjs.length - 2] = ShardParams.DQA.FORCE_SKIP_GET_IDS_PARAM;
+        moddedParamObjs[moddedParamObjs.length - 1] = "false";
+        queryWithAsserts(dqa, params(moddedParamObjs));
+//        rsp2 = query(moddedParamObjs);
+//        compareResponses(rsp, rsp2, dqa);
 
-    // verify that the optimization actually works
-    queryWithAsserts("q", "*:*", "fl", "id", "sort", "payload desc", "rows", "20"); // id only is optimized by default
-    queryWithAsserts("q", "*:*", "fl", "id,score", "sort", "payload desc", "rows", "20"); // id,score only is optimized by default
-    queryWithAsserts("q", "*:*", "fl", "score", "sort", "payload asc", "rows", "20", "distrib.singlePass", "true");
+      }
+    }
 
     // SOLR-6545, wild card field list
     index(id, "19", "text", "d", "cat_a_sS", "1", "dynamic", "2", "payload", ByteBuffer.wrap(new byte[]{(byte) 0x80, 0x11, 0x34}));
     commit();
 
-    nonDistribRsp = queryWithAsserts("q", "id:19", "fl", "id,*a_sS", "sort", "payload asc");
-    rsp = queryWithAsserts("q", "id:19", "fl", "id,*a_sS", "sort", "payload asc", "distrib.singlePass", "true");
+    queryParamsCombinationsToTest = new ArrayList<>();
+    queryParamsCombinationsToTest.add(new String[]{"q", "id:19", "fl", "id,*a_sS", "sort", "payload asc"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "id:19", "fl", "id,dynamic,cat*", "sort", "payload asc"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "id:19", "fl", "id,*a_sS", "sort", "payload asc"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "id:19", "fl", "id,dynamic,cat*", "sort", "payload asc"});
+    // fix for a bug where not all fields are returned if using multiple fl parameters, see SOLR-6796
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "id", "fl", "dynamic", "sort", "payload desc"});
+    // missing fl with sort
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "sort", "payload desc"});
+    // fl=*
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "*", "sort", "payload desc"});
+    queryParamsCombinationsToTest.add(new String[]{"q", "*:*", "fl", "*,score", "sort", "payload desc"});
 
-    assertFieldValues(nonDistribRsp.getResults(), "id", 19);
-    assertFieldValues(rsp.getResults(), "id", 19);
+    for (String[] paramObjs : queryParamsCombinationsToTest) {
+      QueryResponse rsp = query(paramObjs);
+//      assertFieldValues(rsp.getResults(), "id", 19);
+      for (ShardParams.DQA dqa : ShardParams.DQA.values()) {
+        String[] moddedParamObjs = new String[paramObjs.length + 4];
+        for (int i = 0; i < paramObjs.length; i++) {
+          moddedParamObjs[i] = paramObjs[i];
+        }
+        moddedParamObjs[moddedParamObjs.length - 4] = ShardParams.DQA.QUERY_PARAM;
+        moddedParamObjs[moddedParamObjs.length - 3] = (random().nextBoolean()) ? dqa.getId() : dqa.getAliasIds()[0];
+        moddedParamObjs[moddedParamObjs.length - 2] = "not-used";
+        moddedParamObjs[moddedParamObjs.length - 1] = "not-used";
 
-    nonDistribRsp = queryWithAsserts("q", "id:19", "fl", "id,dynamic,cat*", "sort", "payload asc");
-    rsp = queryWithAsserts("q", "id:19", "fl", "id,dynamic,cat*", "sort", "payload asc", "distrib.singlePass", "true");
-    assertFieldValues(nonDistribRsp.getResults(), "id", 19);
-    assertFieldValues(rsp.getResults(), "id", 19);
+//        QueryResponse rsp2 = query(moddedParamObjs);
+//        compareResponses(rsp, rsp2, dqa);
+        queryWithAsserts(dqa, params(moddedParamObjs));
 
-    queryWithAsserts("q", "id:19", "fl", "id,*a_sS", "sort", "payload asc", "distrib.singlePass", "true");
-    queryWithAsserts("q", "id:19", "fl", "id,dynamic,cat*", "sort", "payload asc", "distrib.singlePass", "true");
+        moddedParamObjs[moddedParamObjs.length - 2] = ShardParams.DQA.FORCE_SKIP_GET_IDS_PARAM;
+        moddedParamObjs[moddedParamObjs.length - 1] = "true";
+        queryWithAsserts(dqa, params(moddedParamObjs));
+//        rsp2 = query(moddedParamObjs);
+//        compareResponses(rsp, rsp2, dqa);
+
+        moddedParamObjs[moddedParamObjs.length - 2] = ShardParams.DQA.FORCE_SKIP_GET_IDS_PARAM;
+        moddedParamObjs[moddedParamObjs.length - 1] = "false";
+        queryWithAsserts(dqa, params(moddedParamObjs));
+//        rsp2 = query(moddedParamObjs);
+//        compareResponses(rsp, rsp2, dqa);
+      }
+    }
+
 
     // see SOLR-6795, distrib.singlePass=true would return score even when not asked for
     handle.clear();
@@ -128,22 +192,7 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
     // we don't to compare maxScore because most distributed requests return it anyway (just because they have score already)
     handle.put("maxScore", SKIPVAL);
     // this trips the queryWithAsserts function because it uses a custom parser, so just query directly
-    query("q", "{!func}id", ShardParams.DISTRIB_SINGLE_PASS, "true");
-
-    // fix for a bug where not all fields are returned if using multiple fl parameters, see SOLR-6796
-    queryWithAsserts("q", "*:*", "fl", "id", "fl", "dynamic", "sort", "payload desc", ShardParams.DISTRIB_SINGLE_PASS, "true");
-
-    // missing fl with sort
-    queryWithAsserts("q", "*:*", "sort", "payload desc", ShardParams.DISTRIB_SINGLE_PASS, "true");
-    queryWithAsserts("q", "*:*", "sort", "payload desc");
-
-    // fl=*
-    queryWithAsserts("q", "*:*", "fl", "*", "sort", "payload desc", ShardParams.DISTRIB_SINGLE_PASS, "true");
-    queryWithAsserts("q", "*:*", "fl", "*", "sort", "payload desc");
-
-    // fl=*,score
-    queryWithAsserts("q", "*:*", "fl", "*,score", "sort", "payload desc", ShardParams.DISTRIB_SINGLE_PASS, "true");
-    queryWithAsserts("q", "*:*", "fl", "*,score", "sort", "payload desc");
+    query("q", "{!func}id", ShardParams.DQA.FORCE_SKIP_GET_IDS_PARAM, "true");
   }
 
   /**
@@ -167,18 +216,17 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
    * <p>
    * and also asserts that each query which requests id or score or both behaves exactly like a single pass query
    */
-  private QueryResponse queryWithAsserts(Object... q) throws Exception {
+  private QueryResponse queryWithAsserts(ShardParams.DQA dqa, ModifiableSolrParams params) throws Exception {
+    log.info("Executing query with dqa=" + dqa + " and params: " + params);
     TrackingShardHandlerFactory.RequestTrackingQueue trackingQueue = new TrackingShardHandlerFactory.RequestTrackingQueue();
     // the jettys doesn't include the control jetty which is exactly what we need here
     TrackingShardHandlerFactory.setTrackingQueue(jettys, trackingQueue);
 
     // let's add debug=track to such requests so we can use DebugComponent responses for assertions
-    Object[] qq = new Object[q.length + 2];
-    System.arraycopy(q, 0, qq, 0, q.length);
-    qq[qq.length - 2] = "debug";
-    qq[qq.length - 1] = "track";
+    params.add("debug", "track");
+
     handle.put("debug", SKIPVAL);
-    QueryResponse response = query(qq);
+    QueryResponse response = query(params);
 
     Map<String, List<TrackingShardHandlerFactory.ShardRequestAndParams>> requests = trackingQueue.getAllRequests();
     int numRequests = getNumRequests(requests);
@@ -187,33 +235,31 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
 
     Set<String> fls = new HashSet<>();
     Set<String> sortFields = new HashSet<>();
-    for (int i = 0; i < q.length; i += 2) {
-      if (ShardParams.DISTRIB_SINGLE_PASS.equals(q[i].toString()) && Boolean.parseBoolean(q[i + 1].toString())) {
-        assertTrue("distrib.singlePass=true made more requests than number of shards",
-            numRequests == sliceCount);
-        distribSinglePass = true;
-      }
-      if (CommonParams.FL.equals(q[i].toString())) {
-        fls.addAll(StrUtils.splitSmart(q[i + 1].toString(), ','));
-      }
-      if (CommonParams.SORT.equals(q[i].toString())) {
-        String val = q[i + 1].toString().trim();
-        // take care of asc/desc decorators
-        sortFields.addAll(StrUtils.splitSmart(StrUtils.splitSmart(val, ' ').get(0), ','));
+
+    if (dqa == ShardParams.DQA.FIND_ID_RELEVANCE_FETCH_BY_IDS && dqa.forceSkipGetIds(params)) {
+      assertTrue("distrib.forceSkipGetIds=true made more requests than number of shards",
+          numRequests == sliceCount);
+      distribSinglePass = true;
+    }
+    String[] flsArr = params.getParams(CommonParams.FL);
+    if (flsArr != null) {
+      for (String s : flsArr) {
+        fls.addAll(StrUtils.splitSmart(s, ','));
       }
     }
+    sortFields.addAll(StrUtils.splitSmart(StrUtils.splitSmart(params.get(CommonParams.SORT), ' ').get(0), ','));
 
     Set<String> idScoreFields = new HashSet<>(2);
     idScoreFields.add("id"); // id is always requested in GET_TOP_IDS phase
     // score is optional, requested only if sorted by score
     if (fls.contains("score") || sortFields.contains("score")) idScoreFields.add("score");
 
-    if (idScoreFields.containsAll(fls) && !fls.isEmpty()) {
+    if (dqa == ShardParams.DQA.FIND_ID_RELEVANCE_FETCH_BY_IDS && idScoreFields.containsAll(fls) && !fls.isEmpty()) {
       // if id and/or score are the only fields being requested then we implicitly turn on distribSinglePass=true
       distribSinglePass = true;
     }
 
-    if (distribSinglePass) {
+    if (dqa == ShardParams.DQA.FIND_ID_RELEVANCE_FETCH_BY_IDS && distribSinglePass) {
       Map<String, Object> debugMap = response.getDebugMap();
       SimpleOrderedMap<Object> track = (SimpleOrderedMap<Object>) debugMap.get("track");
       assertNotNull(track);
@@ -228,8 +274,12 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
           CommonParams.FL, ShardRequest.PURPOSE_GET_TOP_IDS, reqAndIdScoreFields.toArray(new String[reqAndIdScoreFields.size()]));
       assertParamsEquals(trackingQueue, DEFAULT_COLLECTION, SHARD2,
           CommonParams.FL, ShardRequest.PURPOSE_GET_TOP_IDS, reqAndIdScoreFields.toArray(new String[reqAndIdScoreFields.size()]));
-    } else {
-      // we are assuming there are facet refinement or distributed idf requests here
+    } else if (dqa == ShardParams.DQA.FIND_ID_RELEVANCE_FETCH_BY_IDS) {
+      if (numRequests > sliceCount * 2) {
+        log.error("Request map = {}", trackingQueue.getAllRequests()); // todo nocommit
+      }
+
+      // we are assuming there are no facet refinement or distributed idf requests here
       assertTrue("distrib.singlePass=false made more requests than 2 * number of shards." +
               " Actual: " + numRequests + " but expected <= " + sliceCount * 2,
           numRequests <= sliceCount * 2);
@@ -245,6 +295,16 @@ public class DistributedQueryComponentOptimizationTest extends AbstractFullDistr
           CommonParams.FL, ShardRequest.PURPOSE_GET_FIELDS, fls.toArray(new String[fls.size()]));
       assertParamsEquals(trackingQueue, DEFAULT_COLLECTION, SHARD2,
           CommonParams.FL, ShardRequest.PURPOSE_GET_FIELDS, fls.toArray(new String[fls.size()]));
+    } else if (dqa == ShardParams.DQA.FIND_RELEVANCE_FIND_IDS_LIMITED_ROWS_FETCH_BY_IDS)  {
+
+    }
+
+    Map<String, Object> debugMap = response.getDebugMap();
+    SimpleOrderedMap<Object> track = (SimpleOrderedMap<Object>) debugMap.get("track");
+    if (dqa.equals(ShardParams.DQA.FIND_RELEVANCE_FIND_IDS_LIMITED_ROWS_FETCH_BY_IDS)) {
+      assertNotNull(track.get("LIMIT_ROWS"));
+    } else {
+      assertNull(track.get("LIMIT_ROWS"));
     }
 
     return response;

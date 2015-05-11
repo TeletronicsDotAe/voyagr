@@ -20,7 +20,9 @@ package org.apache.solr.update.processor;
 import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
+import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.update.AddUpdateCommand;
 import org.apache.solr.update.CommitUpdateCommand;
 import org.apache.solr.update.DeleteUpdateCommand;
@@ -41,26 +43,41 @@ import org.apache.solr.update.RollbackUpdateCommand;
  * @since solr 1.3
  */
 public abstract class UpdateRequestProcessor {
+  protected final SolrRequestInfo requestInfoSet;
+  protected final SolrQueryRequest req;
+  protected final SolrQueryResponse rsp;
   protected final UpdateRequestProcessor next;
 
-  public UpdateRequestProcessor( UpdateRequestProcessor next) {
+  public UpdateRequestProcessor( UpdateRequestProcessor next, SolrQueryRequest req, SolrQueryResponse rsp) {
     this.next = next;
+    this.req = req;
+    this.rsp = rsp;
+    if (SolrRequestInfo.getRequestInfo() == null) {
+      requestInfoSet = new SolrRequestInfo(req, rsp);
+      SolrRequestInfo.setRequestInfo(requestInfoSet);
+    } else {
+      requestInfoSet = null;
+    }
   }
 
   public void processAdd(AddUpdateCommand cmd) throws IOException {
+    // This should hold, but seems not to? assert cmd.getReq() == req;
     if (next != null) next.processAdd(cmd);
   }
 
   public void processDelete(DeleteUpdateCommand cmd) throws IOException {
+	// This should hold, but seems not to? assert cmd.getReq() == req;
     if (next != null) next.processDelete(cmd);
   }
 
   public void processMergeIndexes(MergeIndexesCommand cmd) throws IOException {
+	// This should hold, but seems not to? assert cmd.getReq() == req;
     if (next != null) next.processMergeIndexes(cmd);
   }
 
   public void processCommit(CommitUpdateCommand cmd) throws IOException
   {
+	// This should hold, but seems not to? assert cmd.getReq() == req;
     if (next != null) next.processCommit(cmd);
   }
 
@@ -69,11 +86,13 @@ public abstract class UpdateRequestProcessor {
    */
   public void processRollback(RollbackUpdateCommand cmd) throws IOException
   {
+    assert cmd.getReq() == req;
     if (next != null) next.processRollback(cmd);
   }
 
   public void finish() throws IOException {
     if (next != null) next.finish();    
+    if (requestInfoSet != null && SolrRequestInfo.getRequestInfo() == requestInfoSet) SolrRequestInfo.clearRequestInfo();
   }
 }
 

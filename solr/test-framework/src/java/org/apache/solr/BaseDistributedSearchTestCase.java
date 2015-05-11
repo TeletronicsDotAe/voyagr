@@ -17,6 +17,11 @@ package org.apache.solr;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_PASSWORD;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_USERNAME;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
+
 import junit.framework.Assert;
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.Constants;
@@ -30,6 +35,7 @@ import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.response.UpdateResponse;
+import org.apache.solr.cloud.InterSolrNodeAuthCredentialsFactoryTestingHelper;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrInputDocument;
@@ -37,6 +43,7 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.schema.TrieDateField;
+import org.apache.solr.security.AuthCredentials;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -90,6 +97,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @since solr 1.5
  */
 public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
+  
+  public static final boolean RUN_WITH_COMMON_SECURITY = true;
+  
   // TODO: this shouldn't be static. get the random when you need it to avoid sharing.
   public static Random r;
   
@@ -214,6 +224,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
 
   protected JettySolrRunner controlJetty;
   protected List<SolrClient> clients = new ArrayList<>();
+  protected List<SolrClient> downedClients = new ArrayList<SolrClient>();
   protected List<JettySolrRunner> jettys = new ArrayList<>();
   
   protected String context;
@@ -297,6 +308,9 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   public void distribSetUp() throws Exception {
     distribSetUpCalled = true;
     SolrTestCaseJ4.resetExceptionIgnores();  // ignore anything with ignore_exception in it
+    System.setProperty("internalAuthCredentialsBasicAuthUsername", ALL_USERNAME);
+    System.setProperty("internalAuthCredentialsBasicAuthPassword", ALL_PASSWORD);
+    InterSolrNodeAuthCredentialsFactoryTestingHelper.recalculateNowOnDefaultInternalRequestFactory();
     System.setProperty("solr.test.sys.prop1", "propone");
     System.setProperty("solr.test.sys.prop2", "proptwo");
     testDir = createTempDir().toFile();
@@ -304,6 +318,9 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
 
   private boolean distribTearDownCalled = false;
   public void distribTearDown() throws Exception {
+    System.clearProperty("internalAuthCredentialsBasicAuthUsername");
+    System.clearProperty("internalAuthCredentialsBasicAuthPassword");
+    InterSolrNodeAuthCredentialsFactoryTestingHelper.recalculateNowOnDefaultInternalRequestFactory();
     distribTearDownCalled = true;
     destroyServers();
   }
@@ -416,7 +433,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
         .withFilters(getExtraRequestFilters())
         .withServlets(getExtraServlets())
         .withSSLConfig(sslConfig)
-        .build());
+        .build(), RUN_WITH_COMMON_SECURITY);
 
     jetty.start();
     
@@ -481,11 +498,15 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
    * Indexes the document in both the control client, and a randomly selected client
    */
   protected void indexDoc(SolrInputDocument doc) throws IOException, SolrServerException {
-    controlClient.add(doc);
+    indexDoc(doc, UPDATE_CREDENTIALS);
+  }
+
+  protected void indexDoc(SolrInputDocument doc, AuthCredentials authCredentials) throws IOException, SolrServerException {
+    controlClient.add(doc, -1, authCredentials);
 
     int which = (doc.getField(id).toString().hashCode() & 0x7fffffff) % clients.size();
     SolrClient client = clients.get(which);
-    client.add(doc);
+    client.add(doc, -1, authCredentials);
   }
   
   /**
@@ -505,6 +526,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (SolrInputDocument sdoc : sdocs) {
       ureq.add(sdoc);
     }
+    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     return ureq.process(client);
   }
 
@@ -514,6 +536,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (Object id: ids) {
       ureq.deleteById(id.toString());
     }
+    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     return ureq.process(client);
   }
 
@@ -523,6 +546,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (String q: queries) {
       ureq.deleteByQuery(q);
     }
+    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     return ureq.process(client);
   }
 
@@ -531,31 +555,38 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (int i = 0; i < fields.length; i += 2) {
       doc.addField((String) (fields[i]), fields[i + 1]);
     }
-    controlClient.add(doc);
+    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
 
     SolrClient client = clients.get(serverNumber);
-    client.add(doc);
+    client.add(doc, -1, UPDATE_CREDENTIALS);
   }
 
   protected void del(String q) throws Exception {
-    controlClient.deleteByQuery(q);
+    controlClient.deleteByQuery(q, -1, UPDATE_CREDENTIALS);
     for (SolrClient client : clients) {
-      client.deleteByQuery(q);
+      client.deleteByQuery(q, -1, UPDATE_CREDENTIALS);
     }
   }// serial commit...
 
   protected void commit() throws Exception {
-    controlClient.commit();
+    controlClient.commit(UPDATE_CREDENTIALS);
     for (SolrClient client : clients) {
-      client.commit();
+      client.commit(UPDATE_CREDENTIALS);
     }
   }
 
   protected QueryResponse queryServer(ModifiableSolrParams params) throws SolrServerException, IOException {
+    return queryServer(params, SEARCH_CREDENTIALS);
+  }
+
+  protected QueryResponse queryServer(ModifiableSolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
     // query a random server
-    int which = r.nextInt(clients.size());
-    SolrClient client = clients.get(which);
-    QueryResponse rsp = client.query(params);
+    SolrClient client;
+    do {
+      int which = r.nextInt(clients.size());
+      client = clients.get(which);
+    } while (downedClients.contains(client));
+    QueryResponse rsp = client.query(params, authCredentials);
     return rsp;
   }
 
@@ -579,31 +610,35 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
    * Returns the QueryResponse from {@link #queryServer}  
    */
   protected QueryResponse query(boolean setDistribParams, Object[] q) throws Exception {
+    return query(setDistribParams, q, SEARCH_CREDENTIALS);
+  }
+  
+  protected QueryResponse query(boolean setDistribParams, Object[] q, final AuthCredentials authCredentials) throws Exception {
     
     final ModifiableSolrParams params = new ModifiableSolrParams();
 
     for (int i = 0; i < q.length; i += 2) {
       params.add(q[i].toString(), q[i + 1].toString());
     }
-    return query(setDistribParams, params);
+    return query(setDistribParams, params, authCredentials);
   }
 
   /**
    * Returns the QueryResponse from {@link #queryServer}  
    */
-  protected QueryResponse query(boolean setDistribParams, SolrParams p) throws Exception {
+  protected QueryResponse query(boolean setDistribParams, SolrParams p, final AuthCredentials authCredentials) throws Exception {
     
     final ModifiableSolrParams params = new ModifiableSolrParams(p);
 
     // TODO: look into why passing true causes fails
     params.set("distrib", "false");
-    final QueryResponse controlRsp = controlClient.query(params);
+    final QueryResponse controlRsp = controlClient.query(params, authCredentials);
     validateControlData(controlRsp);
 
     params.remove("distrib");
     if (setDistribParams) setDistributedParams(params);
 
-    QueryResponse rsp = queryServer(params);
+    QueryResponse rsp = queryServer(params, authCredentials);
 
     compareResponses(rsp, controlRsp);
 
@@ -618,7 +653,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
               int which = r.nextInt(clients.size());
               SolrClient client = clients.get(which);
               try {
-                QueryResponse rsp = client.query(new ModifiableSolrParams(params));
+                QueryResponse rsp = client.query(new ModifiableSolrParams(params), authCredentials);
                 if (verifyStress) {
                   compareResponses(rsp, controlRsp);
                 }
@@ -644,7 +679,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   public QueryResponse queryAndCompare(SolrParams params, Iterable<SolrClient> clients) throws SolrServerException, IOException {
     QueryResponse first = null;
     for (SolrClient client : clients) {
-      QueryResponse rsp = client.query(new ModifiableSolrParams(params));
+      QueryResponse rsp = client.query(new ModifiableSolrParams(params), SEARCH_CREDENTIALS);
       if (first == null) {
         first = rsp;
       } else {

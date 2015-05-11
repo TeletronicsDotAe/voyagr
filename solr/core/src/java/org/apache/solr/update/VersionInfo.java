@@ -27,13 +27,14 @@ import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.update.statistics.UpdateLogStats.LookupVersionStatsEntries;
 import org.apache.solr.util.RefCounted;
 
 public class VersionInfo {
-  public static final String VERSION_FIELD="_version_";
 
   private final UpdateLog ulog;
   private final VersionBucket[] buckets;
@@ -42,35 +43,35 @@ public class VersionInfo {
   final ReadWriteLock lock = new ReentrantReadWriteLock(true);
 
   /**
-   * Gets and returns the {@link #VERSION_FIELD} from the specified 
+   * Gets and returns the {@link SolrInputDocument#VERSION_FIELD} from the specified 
    * schema, after verifying that it is indexed, stored, and single-valued.  
    * If any of these pre-conditions are not met, it throws a SolrException 
    * with a user suitable message indicating the problem.
    */
   public static SchemaField getAndCheckVersionField(IndexSchema schema) 
     throws SolrException {
-    final String errPrefix = VERSION_FIELD + " field must exist in schema, using indexed=\"true\" or docValues=\"true\", stored=\"true\" and multiValued=\"false\"";
-    SchemaField sf = schema.getFieldOrNull(VERSION_FIELD);
+    final String errPrefix = SolrInputDocument.VERSION_FIELD + " field must exist in schema, using indexed=\"true\" or docValues=\"true\", stored=\"true\" and multiValued=\"false\"";
+    SchemaField sf = schema.getFieldOrNull(SolrInputDocument.VERSION_FIELD);
 
     if (null == sf) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " does not exist)");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " does not exist)");
     }
     if ( !sf.indexed() && !sf.hasDocValues()) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " must be either indexed or have docValues");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " must be either indexed or have docValues");
     }
     if ( !sf.stored() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " is not stored");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " is not stored");
     }
     if ( sf.multiValued() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " is multiValued");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " is multiValued");
     }
     
     return sf;
@@ -179,25 +180,32 @@ public class VersionInfo {
     return buckets[slot];
   }
 
-  public Long lookupVersion(BytesRef idBytes) {
-    return ulog.lookupVersion(idBytes);
+  public Long lookupVersion(BytesRef idBytes, LookupVersionStatsEntries lookupVersionStatsEntries) {
+	// here we want version even though it originate from a delete - because this
+	// is used for reorder check
+    return ulog.lookupVersion(idBytes, lookupVersionStatsEntries);
   }
 
-  public Long getVersionFromIndex(BytesRef idBytes) {
+  public Long getVersionFromIndex(BytesRef idBytes, LookupVersionStatsEntries lookupVersionStatsEntries) {
     // TODO: we could cache much of this and invalidate during a commit.
     // TODO: most DocValues classes are threadsafe - expose which.
 
     RefCounted<SolrIndexSearcher> newestSearcher = ulog.uhandler.core.getRealtimeSearcher();
     try {
       SolrIndexSearcher searcher = newestSearcher.get();
+      final long startTimeIndexNanosec = System.nanoTime();
       long lookup = searcher.lookupId(idBytes);
-      if (lookup < 0) return null;
+      if (lookup < 0) {
+        if (lookupVersionStatsEntries != null) lookupVersionStatsEntries.registerIndexDocNotFound(startTimeIndexNanosec);
+        return null;
+      }
 
       ValueSource vs = versionField.getType().getValueSource(versionField, null);
       Map context = ValueSource.newContext(searcher);
       vs.createWeight(context, searcher);
       FunctionValues fv = vs.getValues(context, searcher.getTopReaderContext().leaves().get((int)(lookup>>32)));
       long ver = fv.longVal((int)lookup);
+      if (lookupVersionStatsEntries != null) lookupVersionStatsEntries.registerIndexDocFound(startTimeIndexNanosec);
       return ver;
 
     } catch (IOException e) {

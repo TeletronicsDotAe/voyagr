@@ -134,7 +134,7 @@ public final class RegexReplaceProcessorFactory extends FieldMutatingUpdateProce
   public UpdateRequestProcessor getInstance(SolrQueryRequest request,
                                             SolrQueryResponse response,
                                             UpdateRequestProcessor next) {
-    return new FieldValueMutatingUpdateProcessor(getSelector(), next) {
+    return new FieldValueMutatingUpdateProcessor(getSelector(), next, request, response) {
       @Override
       protected Object mutateValue(final Object src) {
         if (src instanceof CharSequence) {

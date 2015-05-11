@@ -26,6 +26,7 @@ import java.security.UnrecoverableKeyException;
 
 import javax.net.ssl.SSLContext;
 
+import org.apache.http.client.HttpClient;
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLContexts;
@@ -35,6 +36,7 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.solr.client.solrj.embedded.SSLConfig;
 import org.apache.solr.client.solrj.impl.HttpClientConfigurer;
 import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.security.AuthCredentials;
 import org.eclipse.jetty.util.security.CertificateUtils;
 
 public class SSLTestConfig extends SSLConfig {
@@ -90,8 +92,9 @@ public class SSLTestConfig extends SSLConfig {
   
   private class SSLHttpClientConfigurer extends HttpClientConfigurer {
     @SuppressWarnings("deprecation")
-    public void configure(DefaultHttpClient httpClient, SolrParams config) {
-      super.configure(httpClient, config);
+    @Override
+    public void configure(HttpClient httpClient, SolrParams config, AuthCredentials authCredentials) {
+      super.configure(httpClient, config, authCredentials);
       SchemeRegistry registry = httpClient.getConnectionManager().getSchemeRegistry();
       // Make sure no tests cheat by using HTTP
       registry.unregister("http");

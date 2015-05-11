@@ -58,14 +58,14 @@ import org.apache.lucene.util.packed.PackedLongValues;
  *
  * @since   lucene 1.4
  */
-class FieldCacheImpl implements FieldCache {
+public class FieldCacheImpl implements FieldCache {
 
-  private Map<Class<?>,Cache> caches;
-  FieldCacheImpl() {
+  protected Map<Class<?>,Cache> caches;
+  public FieldCacheImpl() {
     init();
   }
 
-  private synchronized void init() {
+  protected synchronized void init() {
     caches = new HashMap<>(6);
     caches.put(Long.TYPE, new LongCache(this));
     caches.put(BinaryDocValues.class, new BinaryDocValuesCache(this));
@@ -122,9 +122,9 @@ class FieldCacheImpl implements FieldCache {
   }
 
   /** Expert: Internal cache. */
-  abstract static class Cache {
+  abstract protected static class Cache {
 
-    Cache(FieldCacheImpl wrapper) {
+    protected Cache(FieldCacheImpl wrapper) {
       this.wrapper = wrapper;
     }
 
@@ -227,7 +227,7 @@ class FieldCacheImpl implements FieldCache {
   }
 
   /** Expert: Every composite-key in the internal cache is of this type. */
-  static class CacheKey {
+  static protected class CacheKey {
     final String field;        // which Field
     final Object custom;       // which custom comparator or parser
 
@@ -235,6 +235,10 @@ class FieldCacheImpl implements FieldCache {
     CacheKey(String field, Object custom) {
       this.field = field;
       this.custom = custom;
+    }
+    
+    public String getField() {
+      return field;
     }
 
     /** Two of these are equal iff they reference the same field and type. */
@@ -391,7 +395,7 @@ class FieldCacheImpl implements FieldCache {
     }
   }
 
-  static final class DocsWithFieldCache extends Cache {
+  static protected class DocsWithFieldCache extends Cache {
     DocsWithFieldCache(FieldCacheImpl wrapper) {
       super(wrapper);
     }
@@ -496,7 +500,7 @@ class FieldCacheImpl implements FieldCache {
     }
   }
 
-  static final class LongCache extends Cache {
+  static protected class LongCache extends Cache {
     LongCache(FieldCacheImpl wrapper) {
       super(wrapper);
     }
@@ -649,7 +653,7 @@ class FieldCacheImpl implements FieldCache {
     }
   }
 
-  static class SortedDocValuesCache extends Cache {
+  static protected class SortedDocValuesCache extends Cache {
     SortedDocValuesCache(FieldCacheImpl wrapper) {
       super(wrapper);
     }
@@ -796,7 +800,7 @@ class FieldCacheImpl implements FieldCache {
     return impl.iterator();
   }
 
-  static final class BinaryDocValuesCache extends Cache {
+  static protected class BinaryDocValuesCache extends Cache {
     BinaryDocValuesCache(FieldCacheImpl wrapper) {
       super(wrapper);
     }
@@ -934,7 +938,7 @@ class FieldCacheImpl implements FieldCache {
     return dto.iterator(reader);
   }
 
-  static final class DocTermOrdsCache extends Cache {
+  static protected class DocTermOrdsCache extends Cache {
     DocTermOrdsCache(FieldCacheImpl wrapper) {
       super(wrapper);
     }

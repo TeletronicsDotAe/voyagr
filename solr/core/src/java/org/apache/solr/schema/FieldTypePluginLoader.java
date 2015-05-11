@@ -24,6 +24,7 @@ import org.apache.lucene.analysis.util.*;
 import org.apache.lucene.util.Version;
 import org.apache.solr.analysis.TokenizerChain;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.TestSpeedControllers;
 import org.apache.solr.util.DOMUtil;
 import org.apache.solr.core.Config;
 import org.apache.solr.core.SolrResourceLoader;
@@ -70,6 +71,65 @@ public final class FieldTypePluginLoader
   private final Map<String, FieldType> fieldTypes;
   private final Collection<SchemaAware> schemaAware;
 
+  private static class SimpleCache {
+	  
+	  private static class CacheEntry {
+		  private final String name; 
+		  private final String className; 
+		  
+		  public CacheEntry(String name, String className) {
+			this.name = name;
+			this.className = className;
+  		  }
+
+		@Override
+		public int hashCode() {
+			final int prime = 31;
+			int result = 1;
+			result = prime * result
+					+ ((className == null) ? 0 : className.hashCode());
+			result = prime * result + ((name == null) ? 0 : name.hashCode());
+			return result;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			CacheEntry other = (CacheEntry) obj;
+			if (className == null) {
+				if (other.className != null)
+					return false;
+			} else if (!className.equals(other.className))
+				return false;
+			if (name == null) {
+				if (other.name != null)
+					return false;
+			} else if (!name.equals(other.name))
+				return false;
+			return true;
+		}
+
+	  }
+	  
+	  Map<CacheEntry, FieldType> cache = new HashMap<CacheEntry, FieldType>();
+	  
+	  public FieldType get(SolrResourceLoader loader, String name, String className, Node node) {
+		  FieldType ft = cache.get(new CacheEntry(name, className));
+		  return ft;
+	  }
+	  
+	  public void put(SolrResourceLoader loader, String name, String className, Node node, FieldType ft) {
+		  cache.put(new CacheEntry(name, className), ft);
+	  }
+  }
+  
+  // Do not use this cache approach in production - not sure it does exactly what it is supposed to
+  private static SimpleCache cache = new SimpleCache();
 
   @Override
   protected FieldType create( SolrResourceLoader loader, 
@@ -77,7 +137,11 @@ public final class FieldTypePluginLoader
                               String className, 
                               Node node ) throws Exception {
 
-    FieldType ft = loader.newInstance(className, FieldType.class);
+    FieldType ft;
+    if (TestSpeedControllers.fieldTypePluginLoaderUseFieldTypeCache() &&
+    	((ft = cache.get(loader, name, className, node)) != null)) return ft;
+    
+    ft = loader.newInstance(className, FieldType.class);
     ft.setTypeName(name);
     
     String expression = "./analyzer[@type='query']";
@@ -130,6 +194,9 @@ public final class FieldTypePluginLoader
     if (ft instanceof SchemaAware){
       schemaAware.add((SchemaAware) ft);
     }
+    
+    if (TestSpeedControllers.fieldTypePluginLoaderUseFieldTypeCache())
+    	cache.put(loader, name, className, anode, ft);
     return ft;
   }
   

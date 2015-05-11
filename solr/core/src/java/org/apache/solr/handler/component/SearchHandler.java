@@ -37,6 +37,7 @@ import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.search.SolrQueryTimeoutImpl;
 import org.apache.solr.search.facet.FacetModule;
 import org.apache.solr.util.RTimer;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.util.SolrPluginUtils;
 import org.apache.solr.util.plugin.PluginInfoInitialized;
 import org.apache.solr.util.plugin.SolrCoreAware;
@@ -187,7 +188,7 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
 
     final RTimer timer = rb.isDebug() ? req.getRequestTimer() : null;
 
-    ShardHandler shardHandler1 = shardHandlerFactory.getShardHandler();
+    ShardHandler shardHandler1 = ((HttpShardHandlerFactory)shardHandlerFactory).getShardHandler(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req));
     shardHandler1.checkDistributed(rb);
 
     if (timer == null) {

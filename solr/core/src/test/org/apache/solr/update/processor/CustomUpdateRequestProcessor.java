@@ -28,8 +28,8 @@ import org.apache.solr.update.processor.UpdateRequestProcessorFactory;
  * A passthrough processor that does nothing.
  */
 public class CustomUpdateRequestProcessor extends UpdateRequestProcessor {
-  public CustomUpdateRequestProcessor( UpdateRequestProcessor next) {
-    super(next);
+  public CustomUpdateRequestProcessor( UpdateRequestProcessor next, SolrQueryRequest req, SolrQueryResponse rsp) {
+    super(next, req, rsp);
   }
 }
 

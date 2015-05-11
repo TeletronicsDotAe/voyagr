@@ -42,10 +42,14 @@ import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.SolrInputField;
+import org.apache.solr.common.exceptions.PartialErrors;
+import org.apache.solr.common.exceptions.update.VersionConflict;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ObjectReleaseTracker;
+import org.apache.solr.common.params.ShardParams.DQA;
+import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.XML;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.CoreDescriptor;
@@ -60,6 +64,7 @@ import org.apache.solr.handler.UpdateRequestHandler;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestHandler;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.schema.TrieDateField;
@@ -188,6 +193,18 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   // thread will read the latest value
   protected static volatile SSLTestConfig sslConfig;
 
+  private static DQA.DefaultProvider orgDQADefaultProvider;
+  // Create a default DQA provider to be used for testing
+  private static DQA.DefaultProvider testDQADefaultProvider =
+      new DQA.DefaultProvider() {
+        @Override
+        public DQA getDefault(SolrParams params) {
+          // Select randomly the DQA to use
+          int algNo = Math.abs(random().nextInt()%(DQA.values().length));
+          return DQA.values()[algNo];
+        }
+      };
+
   @ClassRule
   public static TestRule solrClassRules = 
     RuleChain.outerRule(new SystemPropertiesRestoreRule())
@@ -211,6 +228,11 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     System.setProperty("solr.clustering.enabled", "false");
     setupLogging();
     startTrackingSearchers();
+    try {
+      orgDQADefaultProvider = DQA.setDefaultProvider(testDQADefaultProvider);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
     ignoreException("ignore_exception");
     newRandomConfig();
     
@@ -228,6 +250,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   private static void afterClass() throws Exception {
     try {
       deleteCore();
+      switchToOriginalDQADefaultProvider();
       resetExceptionIgnores();
       endTrackingSearchers();
       if (!RandomizedContext.current().getTargetClass().isAnnotationPresent(SuppressObjectReleaseTracker.class)) {
@@ -263,6 +286,21 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     return sslConfig != null && sslConfig.isSSLMode();
   }
 
+  // Some tests that focus on DQA testing want to force usage the real
+  // default DQA provider used. Use this method for switching to the real
+  // default DQA provider
+  public static void switchToOriginalDQADefaultProvider() {
+    DQA.setDefaultProvider(orgDQADefaultProvider);
+  }
+
+  // If you used switchToOriginalDQADefaultProvider to switch to the real
+  // default DQA provider, and you want to switch back to the test default DQA
+  // provider somewhere later in the same test use this method
+  // Switching back will happen automatically at the end of the test class
+  public static void switchToTestDQADefaultProvider() {
+    DQA.setDefaultProvider(testDQADefaultProvider);
+  }
+  
   private static boolean changedFactory = false;
   private static String savedFactory;
   /** Use a different directory factory.  Passing "null" sets to an FS-based factory */
@@ -345,7 +383,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
 
     SolrResourceLoader loader = new SolrResourceLoader(solrHome.getAbsolutePath());
     h = new TestHarness(SolrXmlConfig.fromFile(loader, new File(solrHome, "solr.xml")));
-    lrf = h.getRequestFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
+    lrf = h.getRequestInfoFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
   }
   
   /** sets system properties based on 
@@ -391,6 +429,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
 
   @Override
   public void tearDown() throws Exception {
+    SolrRequestInfo.clearRequestInfo();
     log.info("###Ending " + getTestName());    
     super.tearDown();
   }
@@ -546,7 +585,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    * For use in test methods as needed.
    * </p>
    */
-  protected static TestHarness.LocalRequestFactory lrf;
+  protected static TestHarness.LocalRequestInfoFactory lrf;
 
 
   /**
@@ -615,21 +654,21 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     h = new TestHarness( coreName, hdfsDataDir == null ? initCoreDataDir.getAbsolutePath() : hdfsDataDir,
             solrConfig,
             getSchemaFile());
-    lrf = h.getRequestFactory
+    lrf = h.getRequestInfoFactory
             ("standard",0,20,CommonParams.VERSION,"2.2");
   }
 
   public static CoreContainer createCoreContainer(String solrHome, String solrXML) {
     testSolrHome = checkNotNull(solrHome);
     h = new TestHarness(solrHome, solrXML);
-    lrf = h.getRequestFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
+    lrf = h.getRequestInfoFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
     return h.getCoreContainer();
   }
 
   public static CoreContainer createCoreContainer(NodeConfig config, CoresLocator locator) {
     testSolrHome = config.getSolrResourceLoader().getInstanceDir();
     h = new TestHarness(config, locator);
-    lrf = h.getRequestFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
+    lrf = h.getRequestInfoFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
     return h.getCoreContainer();
   }
 
@@ -644,7 +683,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
   public static CoreContainer createDefaultCoreContainer(String solrHome) {
     testSolrHome = checkNotNull(solrHome);
     h = new TestHarness("collection1", initCoreDataDir.getAbsolutePath(), "solrconfig.xml", "schema.xml");
-    lrf = h.getRequestFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
+    lrf = h.getRequestInfoFactory("standard", 0, 20, CommonParams.VERSION, "2.2");
     return h.getCoreContainer();
   }
 
@@ -729,27 +768,29 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
 
   /** Validates an update XML String failed
    */
-  public static void assertFailedU(String update) {
-    assertFailedU(null, update);
+  public static SolrException assertFailedU(String update) {
+    return assertFailedU(null, update);
   }
 
   /** Validates an update XML String failed
    */
-  public static void assertFailedU(String message, String update) {
-    checkUpdateU(message, update, false);
+  public static SolrException assertFailedU(String message, String update) {
+    return checkUpdateU(message, update, false);
   }
 
   /** Checks the success or failure of an update message
    */
-  private static void checkUpdateU(String message, String update, boolean shouldSucceed) {
+  private static SolrException checkUpdateU(String message, String update, boolean shouldSucceed) {
     try {
       String m = (null == message) ? "" : message + " ";
       if (shouldSucceed) {
            String res = h.validateUpdate(update);
          if (res != null) fail(m + "update was not successful: " + res);
+         return null;
       } else {
-           String res = h.validateErrorUpdate(update);
-         if (res != null) fail(m + "update succeeded, but should have failed: " + res);
+         Object res = h.validateErrorUpdate(update);
+         if (res instanceof String) fail(m + "update succeeded, but should have failed: " + res);
+         return (SolrException)res;
       }
     } catch (SAXException e) {
       throw new RuntimeException("Invalid XML", e);
@@ -996,22 +1037,27 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    * Generates an &lt;add&gt;&lt;doc&gt;... XML String with options
    * on the add.
    *
-   * @param doc the Document to add
+   * @param docs the Documents to add
    * @param args 0th and Even numbered args are param names, Odds are param values.
    * @see #add
    * @see #doc
    */
-  public static String add(XmlDoc doc, String... args) {
+  public static String add(XmlDoc[] docs, String... args) {
     try {
       StringWriter r = new StringWriter();
 
-      // this is annoying
+      StringBuilder content = new StringBuilder();
+      for (int i = 0; i < docs.length; i++) {
+        content.append(docs[i].xml);
+      }
+      
+      // this is anoying
       if (null == args || 0 == args.length) {
         r.write("<add>");
-        r.write(doc.xml);
+        r.write(content.toString());
         r.write("</add>");
       } else {
-        XML.writeUnescapedXML(r, "add", doc.xml, (Object[])args);
+        XML.writeUnescapedXML(r, "add", content.toString(), (Object[])args);
       }
 
       return r.getBuffer().toString();
@@ -1019,6 +1065,20 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
       throw new RuntimeException
         ("this should never happen with a StringWriter", e);
     }
+  }
+
+
+  /**
+   * Generates an &lt;add&gt;&lt;doc&gt;... XML String with options
+   * on the add.
+   *
+   * @param doc the Document to add
+   * @param args 0th and Even numbered args are param names, Odds are param values.
+   * @see #add
+   * @see #doc
+   */
+  public static String add(XmlDoc doc, String... args) {
+    return add(new XmlDoc[]{doc}, args);
   }
 
   /**
@@ -1050,6 +1110,19 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     return d;
   }
 
+  /**
+   * Generates a simple &lt;doc&gt;... XML String with no options
+   *
+   * @param attributesAndValues 0 and even numbered args are attribute names odds are attribute values.
+   * @param fieldsAndValues 0 and even numbered args are fields names, Odds are field values.
+   * @see TestHarness#makeSimpleDoc
+   */
+  public static XmlDoc doc(String[] attributesAndValues, String... fieldsAndValues) {
+    XmlDoc d = new XmlDoc();
+    d.xml = h.makeSimpleDoc(attributesAndValues, fieldsAndValues).toString();
+    return d;
+  }
+  
   public static ModifiableSolrParams params(String... params) {
     ModifiableSolrParams msp = new ModifiableSolrParams();
     for (int i=0; i<params.length; i+=2) {
@@ -1072,7 +1145,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
    * @see #lrf
    */
   public static SolrQueryRequest req(String... q) {
-    return lrf.makeRequest(q);
+    return lrf.makeRequestInfo(q).getReq();
   }
 
   /**
@@ -1088,7 +1161,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
       System.arraycopy(moreParams,0,allParams,params.length,moreParams.length);
     }
 
-    return lrf.makeRequest(allParams);
+    return lrf.makeRequestInfo(allParams).getReq();
   }
 
   /**
@@ -1204,6 +1277,14 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
         }
         out.append(']');
       }
+      
+      if (firstField) firstField=false;
+      else out.append(',');
+      //JSONUtil.writeString("partRef", 0, "partRef".length(), out);
+      out.append(JSONUtil.toJSON("nonfield.partref"));
+      out.append(':');
+      out.append(JSONUtil.toJSON(doc.getUniquePartRef()));
+
       out.append('}');
     } catch (IOException e) {
       // should never happen
@@ -1799,6 +1880,53 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     return result;
   }
 
+  public void assertGenericPartialErrorsPayload(PartialErrors pas, int expectedNoOfPartialErrors, int expectedNoOfHandledParts) {
+    NamedList<Object> payload = pas.getPayload();
+    assertEquals(3, payload.size());
+    assertNotNull(payload.get("responseHeader"));
+    Object partialErrorsObj = payload.get("partialerrors"); 
+    assertNotNull(partialErrorsObj);
+    assertTrue(partialErrorsObj instanceof List<?>);
+    List<NamedList<Object>> partialErrors = (List<NamedList<Object>>)partialErrorsObj; 
+    assertEquals(expectedNoOfPartialErrors, partialErrors.size());
+    for (int i = 0; i < expectedNoOfPartialErrors; i++) {
+      NamedList<Object> innerPayload = partialErrors.get(i);
+      assertTrue(innerPayload.size() >= 4);
+      assertNotNull(innerPayload.get("error-code"));
+      assertNotNull(innerPayload.get("error-type"));
+      assertNotNull(innerPayload.get("error-msg"));
+      assertNotNull(innerPayload.get("partRef"));
+    }
+    Object handledPartsObj = payload.get("handledParts");
+    assertNotNull(handledPartsObj);
+    assertTrue(handledPartsObj instanceof List<?>);
+    List<String> handledParts = (List<String>)handledPartsObj;
+    assertEquals(expectedNoOfHandledParts, handledParts.size());
+  }
+  
+  public void assertVersionConflict(VersionConflict vc, long expectedCurrentVersion, String expectedPartRef, boolean responseHeaderExpected) {
+    assertVersionConflict(vc, expectedCurrentVersion, expectedPartRef != null, expectedPartRef, responseHeaderExpected);
+  }
+  
+  public void assertVersionConflict(VersionConflict vc, long expectedCurrentVersion, boolean partRefExpected, String expectedPartRef, boolean responseHeaderExpected) {
+    NamedList<Object> payload = vc.getPayload();
+    
+    int expectedPayloadSize = 1;
+    if (partRefExpected) expectedPayloadSize++;
+    if (responseHeaderExpected) expectedPayloadSize++;
+    assertEquals(expectedPayloadSize, payload.size());
+    
+    NamedList<Object> properties = (NamedList<Object>)payload.get("properties");
+    assertNotNull(properties);
+    // currentVersion and only currentVersion in properties
+    assertEquals(1, properties.size());
+    assertEquals(expectedCurrentVersion, vc.getCurrentVersion());
+    
+    if (partRefExpected) assertNotNull(payload.get("partRef"));
+    if (expectedPartRef != null) assertEquals(expectedPartRef, payload.get("partRef"));
+    if (responseHeaderExpected) assertNotNull(payload.get("responseHeader"));
+  }
+
   public static void assertXmlFile(final File file, String... xpath)
       throws IOException, SAXException {
 
@@ -1814,7 +1942,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
       throw new RuntimeException("XPath is invalid", e2);
     }
   }
-                                                         
+
   /**
    * Fails if the number of documents in the given SolrDocumentList differs
    * from the given number of expected values, or if any of the values in the

@@ -17,9 +17,9 @@
 
 package org.apache.solr.request;
 
-import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.util.RTimer;
+import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.util.RefCounted;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.common.params.SolrParams;
@@ -51,16 +51,22 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest, Closeabl
   protected Map<Object,Object> context;
   protected Iterable<ContentStream> streams;
   protected Map<String,Object> json;
+  protected AuthCredentials authCredentials;
 
   private final RTimer requestTimer;
 
-  public SolrQueryRequestBase(SolrCore core, SolrParams params, RTimer requestTimer) {
+  public SolrQueryRequestBase(SolrCore core, SolrParams params, RTimer requestTimer, AuthCredentials authCredentials) {
     this.core = core;
     this.schema = null == core ? null : core.getLatestSchema();
     this.params = this.origParams = params;
     this.requestTimer = requestTimer;
+    this.authCredentials = authCredentials;
   }
 
+  public SolrQueryRequestBase(SolrCore core, SolrParams params, RTimer requestTimer) {
+    this(core, params, requestTimer, null);
+  }
+  
   public SolrQueryRequestBase(SolrCore core, SolrParams params) {
     this(core, params, new RTimer());
   }
@@ -102,7 +108,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest, Closeabl
   protected RefCounted<SolrIndexSearcher> searcherHolder;
   @Override
   public SolrIndexSearcher getSearcher() {
-    if(core == null) return null;//a request for a core admin will not have a core
+    if(core == null) return null;//a request for a core admin will no have a core
     // should this reach out and get a searcher from the core singleton, or
     // should the core populate one in a factory method to create requests?
     // or there could be a setSearcher() method that Solr calls
@@ -158,6 +164,11 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest, Closeabl
   @Override
   public String getParamString() {
     return origParams.toString();
+  }
+
+  @Override
+  public AuthCredentials getAuthCredentials() {
+    return authCredentials;
   }
 
   @Override

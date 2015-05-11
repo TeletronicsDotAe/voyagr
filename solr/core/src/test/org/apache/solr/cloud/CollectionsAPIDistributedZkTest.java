@@ -22,6 +22,7 @@ import org.apache.lucene.util.TestUtil;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrRequest;
+import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.impl.CloudSolrClient;
@@ -45,6 +46,7 @@ import org.apache.solr.common.cloud.SolrZkClient;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
+import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.MapSolrParams;
@@ -94,6 +96,7 @@ import static org.apache.solr.cloud.OverseerCollectionProcessor.NUM_SLICES;
 import static org.apache.solr.common.cloud.ZkNodeProps.makeMap;
 import static org.apache.solr.common.cloud.ZkStateReader.MAX_SHARDS_PER_NODE;
 import static org.apache.solr.common.cloud.ZkStateReader.REPLICATION_FACTOR;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
 /**
  * Tests the Cloud Collections API.
@@ -248,6 +251,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     String dataDir = createTempDir().toFile().getAbsolutePath();
     createCmd.setDataDir(dataDir);
     createCmd.setNumShards(2);
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     if (secondConfigSet) {
       createCmd.setCollectionConfigName("conf1");
     }
@@ -259,7 +263,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", collectionName);
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
-
+    request.setAuthCredentials(ALL_CREDENTIALS);
     makeRequest(baseUrl, request);
     
     checkForMissingCollection(collectionName);
@@ -271,6 +275,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("numShards", 2);
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     if (secondConfigSet) {
       params.set("collection.configName", "conf1");
     }
@@ -310,6 +315,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", "halfdeletedcollection2");
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     
     makeRequest(baseUrl, request);
     
@@ -346,6 +352,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("numShards", 2);
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     boolean gotExp = false;
     try {
       makeRequest(baseUrl, request);
@@ -367,6 +374,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     }
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     gotExp = false;
     try {
       makeRequest(baseUrl, request);
@@ -387,6 +395,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set(REPLICATION_FACTOR, 10);
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     gotExp = false;
     try {
       makeRequest(baseUrl, request);
@@ -406,6 +415,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     }
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     gotExp = false;
     try {
       makeRequest(baseUrl, request);
@@ -426,6 +436,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     }
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     gotExp = false;
     try {
       makeRequest(baseUrl, request);
@@ -444,6 +455,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     String dataDir = createTempDir().toFile().getAbsolutePath();
     createCmd.setDataDir(dataDir);
     createCmd.setNumShards(1);
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     if (secondConfigSet) {
       createCmd.setCollectionConfigName("conf1");
     }
@@ -477,18 +489,25 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set(OverseerCollectionProcessor.CREATE_NODE_SET, nn1 + "," + nn2);
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     gotExp = false;
-    NamedList<Object> resp = makeRequest(baseUrl, request);;
-    
-    SimpleOrderedMap success = (SimpleOrderedMap) resp.get("success");
-    SimpleOrderedMap failure = (SimpleOrderedMap) resp.get("failure");
-
-    assertNotNull(resp.toString(), success);
-    assertNotNull(resp.toString(), failure);
-    
-    String val1 = success.getVal(0).toString();
-    String val2 = failure.getVal(0).toString();
-    assertTrue(val1.contains("SolrException") || val2.contains("SolrException"));
+    try {
+      makeRequest(baseUrl, request);;
+    } catch (SolrException e) {
+      gotExp = true;
+      assertTrue(e.getClass().getCanonicalName(), e instanceof PartialErrors);
+      SolrResponse solrResp = ((PartialErrors)e).getSpecializedResponse();
+      List<String> handledPartsRef = solrResp.getHandledPartsRef();
+      assertEquals(2, handledPartsRef.size());
+      assertTrue(handledPartsRef.get(0).contains("halfcollection_shard1_replica1") || handledPartsRef.get(1).contains("halfcollection_shard1_replica1"));
+      assertTrue(handledPartsRef.get(0).contains("halfcollection_shard2_replica1") || handledPartsRef.get(1).contains("halfcollection_shard2_replica1"));
+      Map<String, SolrException> partsRefToPartialErrorMap = solrResp.getPartialErrors();
+      assertEquals(1, partsRefToPartialErrorMap.size());
+      Map.Entry<String, SolrException> partRefToException = partsRefToPartialErrorMap.entrySet().iterator().next();
+      assertTrue(partRefToException.getKey(), partRefToException.getKey().contains("halfcollection_shard1_replica1"));
+      assertTrue(partRefToException.getValue().getMessage(), partRefToException.getValue().getMessage().contains("Core with name 'halfcollection_shard1_replica1' already exists"));
+    }
+    assertTrue(gotExp);
   }
   
   private void testNoCollectionSpecified() throws Exception {
@@ -541,6 +560,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     makeRequest(baseUrl, request);
     
     List<Integer> numShardsNumReplicaList = new ArrayList<>();
@@ -714,13 +734,13 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       SolrInputDocument doc3 = getDoc(id, 8, i1, -600, tlong, 600, t1,
           "humpty dumpy2 sat on a walled");
 
-      collectionClient.add(doc1);
+      collectionClient.add(doc1, -1, UPDATE_CREDENTIALS);
 
-      collectionClient.add(doc2);
+      collectionClient.add(doc2, -1, UPDATE_CREDENTIALS);
 
-      collectionClient.add(doc3);
+      collectionClient.add(doc3, -1, UPDATE_CREDENTIALS);
 
-      collectionClient.commit();
+      collectionClient.commit(UPDATE_CREDENTIALS);
 
       assertEquals(3, collectionClient.query(new SolrQuery("*:*")).getResults().getNumFound());
     }
@@ -736,6 +756,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", collectionName);
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     
     // we can use this client because we just want base url
     final String baseUrl = getBaseUrl((HttpSolrClient) clients.get(0));
@@ -755,6 +776,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", collectionName);
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
  
     makeRequest(baseUrl, request);
     
@@ -769,7 +791,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", "unknown_collection");
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
- 
+    request.setAuthCredentials(ALL_CREDENTIALS);
     boolean exp = false;
     try {
       makeRequest(baseUrl, request);
@@ -792,6 +814,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     }
     request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     makeRequest(baseUrl, request);
     
     List<Integer> list = new ArrayList<>(2);
@@ -889,6 +912,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
             // remove collection
             CollectionAdminRequest.Delete delete = new CollectionAdminRequest.Delete();
             delete.setCollectionName(collectionName);
+            delete.setAuthCredentials(ALL_CREDENTIALS);
             client.request(delete);
           } catch (SolrServerException | IOException e) {
             e.printStackTrace();
@@ -980,7 +1004,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
           ZkCoreNodeProps coreProps = new ZkCoreNodeProps(shardEntry.getValue());
           CoreAdminResponse mcr;
           try (HttpSolrClient server = new HttpSolrClient(coreProps.getBaseUrl())) {
-            mcr = CoreAdminRequest.getStatus(coreProps.getCoreName(), server);
+            mcr = CoreAdminRequest.getStatus(coreProps.getCoreName(), server, ALL_CREDENTIALS);
           }
           long before = mcr.getStartTime(coreProps.getCoreName()).getTime();
           urlToTime.put(coreProps.getCoreUrl(), before);
@@ -1024,7 +1048,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       boolean missing = false;
 
       try {
-        collectionClient.query(new SolrQuery("*:*"));
+        collectionClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS);
       } catch (SolrException e) {
         if (!(e.code() == 403 || e.code() == 503 || e.code() == 404)) {
           throw e;
@@ -1100,6 +1124,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       addReplica.setCollectionName(collectionName);
       addReplica.setShardName("shard1");
       addReplica.setNode(nodeList.get(0));
+      addReplica.setAuthCredentials(ALL_CREDENTIALS);
       client.request(addReplica);
 
       long timeout = System.currentTimeMillis() + 3000;
@@ -1125,6 +1150,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       String instancePathStr = createTempDir().toString();
       props.put(CoreAdminParams.INSTANCE_DIR, instancePathStr); //Use name via the property.instanceDir method
       addReplica.setProperties(props);
+      addReplica.setAuthCredentials(ALL_CREDENTIALS);
       client.request(addReplica);
 
       timeout = System.currentTimeMillis() + 3000;
@@ -1155,7 +1181,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     if (r.nextBoolean())
       params.set("collection",DEFAULT_COLLECTION);
 
-    QueryResponse rsp = getCommonCloudSolrClient().query(params);
+    QueryResponse rsp = getCommonCloudSolrClient().query(params, SEARCH_CREDENTIALS);
     return rsp;
   }
 
@@ -1197,6 +1223,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     if(val != null) m.put("val", val);
     SolrRequest request = new QueryRequest(new MapSolrParams(m));
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     client.request(request);
 
     long timeOut = System.currentTimeMillis() + 3000;

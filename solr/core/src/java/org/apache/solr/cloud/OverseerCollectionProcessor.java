@@ -40,6 +40,7 @@ import static org.apache.solr.common.params.CollectionParams.CollectionAction.DE
 import static org.apache.solr.common.params.CollectionParams.CollectionAction.DELETESHARD;
 import static org.apache.solr.common.params.CollectionParams.CollectionAction.REMOVEROLE;
 
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -62,6 +63,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.ImmutableSet;
 import org.apache.commons.lang.StringUtils;
+import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
@@ -91,6 +93,7 @@ import org.apache.solr.common.cloud.ZkConfigManager;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
+import org.apache.solr.common.exceptions.SolrExceptionCausedByException;
 import org.apache.solr.common.params.CollectionParams;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
@@ -100,11 +103,17 @@ import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.handler.component.HttpShardHandler;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.handler.component.ShardHandlerFactory;
 import org.apache.solr.handler.component.ShardRequest;
 import org.apache.solr.handler.component.ShardResponse;
 import org.apache.solr.logging.MDCUtils;
+import org.apache.solr.request.SolrQueryRequestBase;
+import org.apache.solr.response.BinaryResponseWriter;
+import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.servlet.ResponseUtils;
+import org.apache.solr.servlet.cache.Method;
 import org.apache.solr.update.SolrIndexSplitter;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.solr.util.stats.Snapshot;
@@ -645,11 +654,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
             + " failed", e);
       }
 
-      results.add("Operation " + operation + " caused exception:", e);
-      SimpleOrderedMap nl = new SimpleOrderedMap();
-      nl.add("msg", e.getMessage());
-      nl.add("rspCode", e instanceof SolrException ? ((SolrException)e).code() : -1);
-      results.add("exception", nl);
+      results.add("exception", e);
     }
     return new OverseerSolrResponse(results);
   }
@@ -1724,7 +1729,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
 
         log.info("Successfully created all replica shards for all sub-slices " + subSlices);
 
-        commit(results, slice, parentShardLeader);
+        commit(results, slice, parentShardLeader, ((HttpShardHandler)shardHandler).getHttpClient());
 
         if (repFactor == 1) {
           // switch sub shard states to 'active'
@@ -1764,14 +1769,14 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
     }
   }
 
-  private void commit(NamedList results, String slice, Replica parentShardLeader) {
+  private void commit(NamedList results, String slice, Replica parentShardLeader, HttpClient httpClient) {
     log.info("Calling soft commit to make sub shard updates visible");
     String coreUrl = new ZkCoreNodeProps(parentShardLeader).getCoreUrl();
     // HttpShardHandler is hard coded to send a QueryRequest hence we go direct
     // and we force open a searcher so that we have documents to show upon switching states
     UpdateResponse updateResponse = null;
     try {
-      updateResponse = softCommit(coreUrl);
+      updateResponse = softCommit(coreUrl, httpClient);
       processResponse(results, null, coreUrl, updateResponse, slice);
     } catch (Exception e) {
       processResponse(results, e, coreUrl, updateResponse, slice);
@@ -1780,9 +1785,9 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
   }
 
 
-  static UpdateResponse softCommit(String url) throws SolrServerException, IOException {
+  static UpdateResponse softCommit(String url, HttpClient httpClient) throws SolrServerException, IOException {
 
-    try (HttpSolrClient client = new HttpSolrClient(url)) {
+    try (HttpSolrClient client = new HttpSolrClient(url, httpClient)) {
       client.setConnectionTimeout(30000);
       client.setSoTimeout(120000);
       UpdateRequest ureq = new UpdateRequest();
@@ -1857,9 +1862,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
         Throwable exception = srsp.getException();
         if (abortOnError && exception != null)  {
           // drain pending requests
-          while (srsp != null)  {
-            srsp = shardHandler.takeCompletedOrError();
-          }
+          shardHandler.cancelAll();
           throw new SolrException(ErrorCode.SERVER_ERROR, msgOnError, exception);
         }
       }
@@ -2722,7 +2725,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
         results.add("failure", failure);
       }
 
-      failure.add(nodeName, e.getClass().getName() + ":" + e.getMessage());
+      failure.add(nodeName, e);
 
     } else {
 
@@ -2864,11 +2867,42 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
         }
 
         if(asyncId != null) {
-          if (response != null && (response.getResponse().get("failure") != null || response.getResponse().get("exception") != null)) {
-            failureMap.put(asyncId, null);
+          Exception exception = (response != null)?((Exception)response.getResponse().get("exception")):null;
+          SimpleOrderedMap failures = (response != null)?((SimpleOrderedMap)response.getResponse().get("failure")):null;
+          boolean failure = failures != null || exception != null; 
+          SolrQueryResponse rsp = new SolrQueryResponse();
+          if (failure) {
+            if (exception != null) {
+              rsp.setException(exception);
+            } else {
+              for (int i = 0; i < failures.size(); i++) {
+                String nodeName = failures.getName(i);
+                rsp.addHandledPart(nodeName);
+                Exception subException = (Exception)failures.getVal(i);
+                
+                ErrorCode errorCode = (subException instanceof SolrException)?ErrorCode.getErrorCode(((SolrException)subException).code()):ErrorCode.UNKNOWN;
+                SolrException partialError = (subException instanceof SolrException)?((SolrException)subException):new SolrExceptionCausedByException(errorCode, "Not able to perform sub-operation", subException);
+                rsp.addPartialError(nodeName, partialError);
+              }
+            }
+          }
+          SimpleOrderedMap successes = (response != null)?((SimpleOrderedMap)response.getResponse().get("success")):null;
+          for (int i = 0; i < successes.size(); i++) {
+            String nodeName = failures.getName(i);
+            rsp.addHandledPart(nodeName);
+          }
+          BinaryResponseWriter writer = new BinaryResponseWriter();
+          ByteArrayOutputStream out = new ByteArrayOutputStream();
+          try {
+            ResponseUtils.writeResponse(rsp, out, writer, new SolrQueryRequestBase(null, new ModifiableSolrParams()){}, Method.GET);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+          if (failure) {
+            failureMap.put(asyncId, out.toByteArray());
             log.debug("Updated failed map for task with zkid:[{}]", head.getId());
           } else {
-            completedMap.put(asyncId, null);
+            completedMap.put(asyncId, out.toByteArray());
             log.debug("Updated completed map for task with zkid:[{}]", head.getId());
           }
         } else {

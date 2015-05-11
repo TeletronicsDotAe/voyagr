@@ -16,6 +16,8 @@ package org.apache.solr.schema;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.QueryRequest;
@@ -55,6 +57,7 @@ public class TestCloudManagedSchema extends AbstractFullDistribZkTestBase {
     params.set(CoreAdminParams.ACTION, CoreAdminParams.CoreAdminAction.STATUS.toString());
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/cores");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     int which = r.nextInt(clients.size());
     HttpSolrClient client = (HttpSolrClient)clients.get(which);
     String previousBaseURL = client.getBaseURL();

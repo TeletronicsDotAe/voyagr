@@ -44,6 +44,7 @@ import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.common.util.Hash;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.core.SolrCore;
@@ -59,7 +60,13 @@ import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SolrReturnFields;
 import org.apache.solr.update.DocumentBuilder;
 import org.apache.solr.update.PeerSync;
+import org.apache.solr.update.RecentlyLookedUpOrUpdatedDocumentsHandler;
+import org.apache.solr.update.RecentlyLookedUpOrUpdatedDocumentsHandler.FoundLocation;
 import org.apache.solr.update.UpdateLog;
+import org.apache.solr.update.UpdateLog.LookupResult;
+import org.apache.solr.update.VersionBucket;
+import org.apache.solr.update.VersionInfo;
+import org.apache.solr.update.statistics.RealtimeGetComponentStats.GetInputDocumentStatsEntries;
 import org.apache.solr.util.RefCounted;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +74,7 @@ import org.slf4j.LoggerFactory;
 
 public class RealTimeGetComponent extends SearchComponent
 {
-  public static Logger log = LoggerFactory.getLogger(UpdateLog.class);
+  public static Logger log = LoggerFactory.getLogger(RealTimeGetComponent.class);
   public static final String COMPONENT_NAME = "get";
 
   @Override
@@ -78,6 +85,7 @@ public class RealTimeGetComponent extends SearchComponent
   }
 
 
+  private static final VersionBucket dummySynchBucket = new VersionBucket();
   @Override
   public void process(ResponseBuilder rb) throws IOException
   {
@@ -161,28 +169,34 @@ public class RealTimeGetComponent extends SearchComponent
      BytesRefBuilder idBytes = new BytesRefBuilder();
      for (String idStr : allIds) {
        fieldType.readableToIndexed(idStr, idBytes);
+       
+       VersionInfo vinfo = (ulog != null)?ulog.getVersionInfo():null;
+       int bucketHash = Hash.murmurhash3_x86_32(idBytes.get().bytes, idBytes.get().offset, idBytes.get().length, 0);
+
+       VersionBucket bucket = (vinfo != null)?vinfo.bucket(bucketHash):dummySynchBucket;
+
+       // This lock is to make sure that no deleteByQuery etc (see VersionInfo.blockUpdates) is running while we are
+       // finding and more importantly adding to cache.
+       // We can potentially make a less "limiting" synchronizing
+       // This code also exists in eDR CacheImpl.getCompleteCacheEntry, so change code both places if we change
+       if (vinfo != null) vinfo.lockForUpdate();
+       try {
+       // This synchronized is to make sure that no update request is modifying the document while we are finding
+       // and more importantly adding it to cache. See DistributedUpdateProcessor.versionAdd and .versionDelete
+       // We can potentially make a less "limiting" synchronizing
+       // This code also exists in eDR CacheImpl.getCompleteCacheEntry, so change code both places if we change
+       synchronized (bucket) {
        if (ulog != null) {
-         Object o = ulog.lookup(idBytes.get());
-         if (o != null) {
-           // should currently be a List<Oper,Ver,Doc/Id>
-           List entry = (List)o;
-           assert entry.size() >= 3;
-           int oper = (Integer)entry.get(0) & UpdateLog.OPERATION_MASK;
-           switch (oper) {
-             case UpdateLog.ADD:
-               SolrDocument doc = toSolrDoc((SolrInputDocument)entry.get(entry.size()-1), core.getLatestSchema());
+           LookupResult lr = ulog.lookup(idBytes.get(), null, true);
+           if (lr.getSid() != null) {
+             SolrDocument doc = toSolrDoc(lr.getSid(), core.getLatestSchema());
                if(transformer!=null) {
                  transformer.transform(doc, -1); // unknown docID
                }
               docList.add(doc);
-              break;
-             case UpdateLog.DELETE:
-              break;
-             default:
-               throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,  "Unknown Operation! " + oper);
-           }
            continue;
          }
+         if (!lr.isMaybeInIndex()) continue;
        }
 
        // didn't find it in the update log, so it should be in the newest searcher opened
@@ -201,6 +215,13 @@ public class RealTimeGetComponent extends SearchComponent
          transformer.transform(doc, docid);
        }
        docList.add(doc);
+         
+       SolrInputDocument sid = toSolrInputDocument(luceneDocument, core.getLatestSchema());
+         
+       RecentlyLookedUpOrUpdatedDocumentsHandler.getRecentlyLookedUpOrUpdatedDocuments().addDocument(ulog, idBytes.get(), sid, FoundLocation.Index);
+       }} finally {
+         if (vinfo != null) vinfo.unlockForUpdate();
+       }
      }
 
    } finally {
@@ -230,37 +251,26 @@ public class RealTimeGetComponent extends SearchComponent
    * null if there is no record of it in the current update log.  If null is returned, it could
    * still be in the latest index.
    */
-  public static SolrInputDocument getInputDocumentFromTlog(SolrCore core, BytesRef idBytes) {
+  public static SolrInputDocument getInputDocumentFromTlog(SolrCore core, BytesRef idBytes, GetInputDocumentStatsEntries getInputDocumentStatsEntries) {
 
     UpdateLog ulog = core.getUpdateHandler().getUpdateLog();
 
     if (ulog != null) {
-      Object o = ulog.lookup(idBytes);
-      if (o != null) {
-        // should currently be a List<Oper,Ver,Doc/Id>
-        List entry = (List)o;
-        assert entry.size() >= 3;
-        int oper = (Integer)entry.get(0) & UpdateLog.OPERATION_MASK;
-        switch (oper) {
-          case UpdateLog.ADD:
-            return (SolrInputDocument)entry.get(entry.size()-1);
-          case UpdateLog.DELETE:
-            return DELETED;
-          default:
-            throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,  "Unknown Operation! " + oper);
-        }
-      }
+      LookupResult lr = ulog.lookup(idBytes, getInputDocumentStatsEntries.getLookupStatsEntries(), true);
+      if (lr.getSid() != null) return lr.getSid();
+      return lr.isMaybeInIndex()?null:DELETED;
     }
 
     return null;
   }
 
-  public static SolrInputDocument getInputDocument(SolrCore core, BytesRef idBytes) throws IOException {
+  public static SolrInputDocument getInputDocument(SolrCore core, BytesRef idBytes, GetInputDocumentStatsEntries getInputDocumentStatsEntries) throws IOException {
+    long startTimeNanosecs = System.nanoTime();
     SolrInputDocument sid = null;
     RefCounted<SolrIndexSearcher> searcherHolder = null;
     try {
       SolrIndexSearcher searcher = null;
-      sid = getInputDocumentFromTlog(core, idBytes);
+      sid = getInputDocumentFromTlog(core, idBytes, getInputDocumentStatsEntries);
       if (sid == DELETED) {
         return null;
       }
@@ -275,21 +285,30 @@ public class RealTimeGetComponent extends SearchComponent
         // SolrCore.verbose("RealTimeGet using searcher ", searcher);
         SchemaField idField = core.getLatestSchema().getUniqueKeyField();
 
+        final long startTimeIndexNanosec = System.nanoTime();
         int docid = searcher.getFirstMatch(new Term(idField.getName(), idBytes));
-        if (docid < 0) return null;
+        if (docid < 0) {
+          getInputDocumentStatsEntries.registerIndexDocNotFound(startTimeIndexNanosec);
+          return null;
+        }
         Document luceneDocument = searcher.doc(docid);
         sid = toSolrInputDocument(luceneDocument, core.getLatestSchema());
+        getInputDocumentStatsEntries.registerIndexDocFound(startTimeIndexNanosec);
+      
+        UpdateLog ulog = core.getUpdateHandler().getUpdateLog();
+        RecentlyLookedUpOrUpdatedDocumentsHandler.getRecentlyLookedUpOrUpdatedDocuments().addDocument(ulog, idBytes, sid, FoundLocation.Index);
       }
     } finally {
       if (searcherHolder != null) {
         searcherHolder.decref();
       }
+      getInputDocumentStatsEntries.registerTotal(startTimeNanosecs);
     }
 
     return sid;
   }
 
-  private static SolrInputDocument toSolrInputDocument(Document doc, IndexSchema schema) {
+  public static SolrInputDocument toSolrInputDocument(Document doc, IndexSchema schema) {
     SolrInputDocument out = new SolrInputDocument();
     for( IndexableField f : doc.getFields() ) {
       String fname = f.name();
@@ -312,7 +331,7 @@ public class RealTimeGetComponent extends SearchComponent
   }
 
 
-  private static SolrDocument toSolrDoc(Document doc, IndexSchema schema) {
+  public static SolrDocument toSolrDoc(Document doc, IndexSchema schema) {
     SolrDocument out = new SolrDocument();
     for( IndexableField f : doc.getFields() ) {
       // Make sure multivalued fields are represented as lists
@@ -339,7 +358,7 @@ public class RealTimeGetComponent extends SearchComponent
     return out;
   }
 
-  private static SolrDocument toSolrDoc(SolrInputDocument sdoc, IndexSchema schema) {
+  public static SolrDocument toSolrDoc(SolrInputDocument sdoc, IndexSchema schema) {
     // TODO: do something more performant than this double conversion
     Document doc = DocumentBuilder.toDocument(sdoc, schema);
 
@@ -570,10 +589,14 @@ public class RealTimeGetComponent extends SearchComponent
     boolean cantReachIsSuccess = rb.req.getParams().getBool("cantReachIsSuccess", false);
     
     PeerSync peerSync = new PeerSync(rb.req.getCore(), replicas, nVersions, cantReachIsSuccess, true);
+    try {
     boolean success = peerSync.sync();
     
     // TODO: more complex response?
     rb.rsp.add("sync", success);
+    } finally {
+      peerSync.close();
+    }
   }
   
 

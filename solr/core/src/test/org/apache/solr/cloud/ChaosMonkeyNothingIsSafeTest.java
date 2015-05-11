@@ -17,6 +17,9 @@ package org.apache.solr.cloud;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
+
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakLingering;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.lucene.util.LuceneTestCase.Slow;
@@ -239,17 +242,17 @@ public class ChaosMonkeyNothingIsSafeTest extends AbstractFullDistribZkTestBase 
       // have request fails 
       checkShardConsistency(!runFullThrottle, true, addFails, deleteFails);
       
-      long ctrlDocs = controlClient.query(new SolrQuery("*:*")).getResults()
+      long ctrlDocs = controlClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
       .getNumFound(); 
       
       // ensure we have added more than 0 docs
-      long cloudClientDocs = cloudClient.query(new SolrQuery("*:*"))
+      long cloudClientDocs = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS)
           .getResults().getNumFound();
       
       assertTrue("Found " + ctrlDocs + " control docs", cloudClientDocs > 0);
       
       if (VERBOSE) System.out.println("control docs:"
-          + controlClient.query(new SolrQuery("*:*")).getResults()
+          + controlClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
               .getNumFound() + "\n\n");
       
       // try and make a collection to make sure the overseer has survived the expiration and session loss
@@ -298,10 +301,10 @@ public class ChaosMonkeyNothingIsSafeTest extends AbstractFullDistribZkTestBase 
     private volatile boolean stop = false;
     int clientIndex = 0;
     private ConcurrentUpdateSolrClient cusc;
-    private List<SolrClient> clients;
+    private List<? extends SolrClient> clients;
     private AtomicInteger fails = new AtomicInteger();
     
-    public FullThrottleStoppableIndexingThread(List<SolrClient> clients,
+    public FullThrottleStoppableIndexingThread(List<? extends SolrClient> clients,
                                                String id, boolean doDeletes) {
       super(controlClient, cloudClient, id, doDeletes);
       setName("FullThrottleStopableIndexingThread");
@@ -353,7 +356,7 @@ public class ChaosMonkeyNothingIsSafeTest extends AbstractFullDistribZkTestBase 
               50,
               t1,
               "Saxon heptarchies that used to rip around so in old times and raise Cain.  My, you ought to seen old Henry the Eight when he was in bloom.  He WAS a blossom.  He used to marry a new wife every day, and chop off her head next morning.  And he would do it just as indifferent as if ");
-          cusc.add(doc);
+          cusc.add(doc, -1, UPDATE_CREDENTIALS);
         } catch (Exception e) {
           changeUrlOnError(e);
           //System.err.println("REQUEST FAILED:");

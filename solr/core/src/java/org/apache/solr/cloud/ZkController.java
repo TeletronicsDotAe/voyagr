@@ -24,6 +24,7 @@ import org.apache.solr.cloud.overseer.OverseerAction;
 import org.apache.solr.cloud.overseer.SliceMutator;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
+import org.apache.solr.common.TestSpeedControllers;
 import org.apache.solr.common.cloud.BeforeReconnect;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.ClusterStateUtil;
@@ -402,7 +403,7 @@ public final class ZkController {
             return;
           }
           try {
-            Thread.sleep(1000);
+            Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
           } catch (InterruptedException e1) {
             Thread.currentThread().interrupt();
           }
@@ -453,7 +454,7 @@ public final class ZkController {
             return;
           }
           try {
-            Thread.sleep(5000);
+            Thread.sleep(5*TestSpeedControllers.zkControllerSleepFactor());
           } catch (InterruptedException e1) {
             Thread.currentThread().interrupt();
           }
@@ -729,10 +730,10 @@ public final class ZkController {
       
       if (updatedNodes.size() == 0) {
         foundStates = true;
-        Thread.sleep(1000);
+        Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
         break;
       }
-      Thread.sleep(1000);
+      Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
     }
     if (!foundStates) {
       log.warn("Timed out waiting to see all nodes published as DOWN in our cluster state.");
@@ -1017,10 +1018,10 @@ public final class ZkController {
           throw new RuntimeException("Session has expired - could not get leader props", exp);
         }
         exp = e;
-        Thread.sleep(1000);
+        Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
       }  catch (Exception e) {
         exp = e;
-        Thread.sleep(1000);
+        Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
       }
       if (cc.isShutDown()) {
         throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE, "CoreContainer is close");
@@ -1411,7 +1412,7 @@ public final class ZkController {
       }
       
       log.info("Could not find collection configName - pausing for 3 seconds and trying again - try: " + retry);
-      Thread.sleep(3000);
+      Thread.sleep(3*TestSpeedControllers.zkControllerSleepFactor());
     }
     if (retry == retryLimt) {
       log.error("Could not find configName for collection " + collection);
@@ -1464,7 +1465,7 @@ public final class ZkController {
         }
       }
       try {
-        Thread.sleep(1000);
+        Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
@@ -1481,7 +1482,7 @@ public final class ZkController {
         return;
       }
       try {
-        Thread.sleep(1000);
+        Thread.sleep(TestSpeedControllers.zkControllerSleepFactor());
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
@@ -1598,7 +1599,7 @@ public final class ZkController {
       } catch (Exception e) {
         SolrException.log(log, "There was a problem finding the leader in zk", e);
         try {
-          Thread.sleep(2000);
+          Thread.sleep(2*TestSpeedControllers.zkControllerSleepFactor());
         } catch (InterruptedException e1) {
           Thread.currentThread().interrupt();
         }
@@ -1677,7 +1678,7 @@ public final class ZkController {
               SolrException.log(log,
                   "There was a problem making a request to the leader", e);
               try {
-                Thread.sleep(2000);
+                Thread.sleep(2*TestSpeedControllers.zkControllerSleepFactor());
               } catch (InterruptedException e1) {
                 Thread.currentThread().interrupt();
               }

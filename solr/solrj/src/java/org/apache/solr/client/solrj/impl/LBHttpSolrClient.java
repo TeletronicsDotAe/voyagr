@@ -167,11 +167,17 @@ public class LBHttpSolrClient extends SolrClient {
     protected SolrRequest request;
     protected List<String> servers;
     protected int numDeadServersToTry;
+    protected HttpClient httpClient;
 
     public Req(SolrRequest request, List<String> servers) {
+      this(request, servers, null);
+    }
+    
+    public Req(SolrRequest request, List<String> servers, HttpClient httpClient) {
       this.request = request;
       this.servers = servers;
       this.numDeadServersToTry = servers.size();
+      this.httpClient = httpClient;
     }
 
     public SolrRequest getRequest() {
@@ -190,6 +196,10 @@ public class LBHttpSolrClient extends SolrClient {
      * Defaults to the number of servers in this request. */
     public void setNumDeadServersToTry(int numDeadServersToTry) {
       this.numDeadServersToTry = numDeadServersToTry;
+    }
+    
+    public HttpClient getHttpClient() {
+      return httpClient;
     }
   }
 
@@ -262,7 +272,11 @@ public class LBHttpSolrClient extends SolrClient {
   }
 
   protected HttpSolrClient makeSolrClient(String server) {
-    HttpSolrClient client = new HttpSolrClient(server, httpClient, parser);
+    return makeSolrClient(server, null);
+  }
+  
+  protected HttpSolrClient makeSolrClient(String server, HttpClient httpClient) {
+    HttpSolrClient client = new HttpSolrClient(server, (httpClient == null)?this.httpClient:httpClient, parser);
     if (requestWriter != null) {
       client.setRequestWriter(requestWriter);
     }
@@ -320,7 +334,7 @@ public class LBHttpSolrClient extends SolrClient {
         continue;
       }
       rsp.server = serverStr;
-      HttpSolrClient client = makeSolrClient(serverStr);
+      HttpSolrClient client = makeSolrClient(serverStr, req.httpClient);
 
       ex = doRequest(client, req, rsp, isUpdate, false, null);
       if (ex == null) {
@@ -335,7 +349,8 @@ public class LBHttpSolrClient extends SolrClient {
           break;
         }
 
-        ex = doRequest(wrapper.client, req, rsp, isUpdate, true, wrapper.getKey());
+        HttpSolrClient client = (req.httpClient != wrapper.client.getHttpClient())?makeSolrClient(wrapper.getKey(), req.httpClient):wrapper.client;
+        ex = doRequest(client, req, rsp, isUpdate, true, wrapper.getKey());
         if (ex == null) {
           return rsp; // SUCCESS
         }

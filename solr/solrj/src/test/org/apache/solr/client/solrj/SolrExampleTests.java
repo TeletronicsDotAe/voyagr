@@ -43,6 +43,7 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.exceptions.update.VersionConflict;
 import org.apache.solr.common.params.AnalysisParams;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.FacetParams;
@@ -1334,10 +1335,11 @@ abstract public class SolrExampleTests extends SolrExampleTestsBase
         fail("Operation should throw an exception!");
       } else {
         client.commit(); //just to be sure the client has sent the doc
-        assertTrue("ConcurrentUpdateSolrClient did not report an error", ((Throwable) getConcurrentClientExceptionField(client).get(client)).getMessage().contains("Conflict"));
+        Throwable t = (Throwable) getConcurrentClientExceptionField(client).get(client);
+        assertTrue("ConcurrentUpdateSolrClient did not report an error", t != null && (t instanceof VersionConflict) && t.getMessage().contains("Attempt to update document with uniqueKey unique failed. Version in document to be updated " + (version+1) + " does not match current version " + version));
       }
     } catch (SolrException se) {
-      assertTrue("No identifiable error message", se.getMessage().contains("version conflict for unique"));
+      assertTrue("No identifiable error message",  (se instanceof VersionConflict) && se.getMessage().contains("Attempt to update document with uniqueKey unique failed. Version in document to be updated " + (version+1) + " does not match current version " + version));
     }
     
     //update "price", use correct version (optimistic locking)

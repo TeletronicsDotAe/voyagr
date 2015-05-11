@@ -33,6 +33,7 @@ import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.handler.component.ShardRequest;
 import org.apache.solr.handler.component.ShardResponse;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
@@ -53,18 +54,20 @@ public class SyncStrategy {
   private final boolean SKIP_AUTO_RECOVERY = Boolean.getBoolean("solrcloud.skip.autorecovery");
   
   private final ShardHandler shardHandler;
-
+  private final AuthCredentialsSource authCredentialsSource;
+  
   private volatile boolean isClosed;
   
   private final HttpClient client;
 
   private final ExecutorService updateExecutor;
   
-  public SyncStrategy(CoreContainer cc) {
+  public SyncStrategy(CoreContainer cc, AuthCredentialsSource authCredentialsSource) {
     UpdateShardHandler updateShardHandler = cc.getUpdateShardHandler();
     client = updateShardHandler.getHttpClient();
-    shardHandler = cc.getShardHandlerFactory().getShardHandler();
+    shardHandler = cc.getShardHandlerFactory().getShardHandler(authCredentialsSource);
     updateExecutor = updateShardHandler.getUpdateExecutor();
+    this.authCredentialsSource = authCredentialsSource;
   }
   
   private static class ShardCoreRequest extends ShardRequest {
@@ -164,7 +167,11 @@ public class SyncStrategy {
     // TODO: as an assurance, we should still try and tell the sync nodes that we couldn't reach
     // to recover once more?
     PeerSync peerSync = new PeerSync(core, syncWith, core.getUpdateHandler().getUpdateLog().getNumRecordsToKeep(), true, true, peerSyncOnlyWithActive);
-    return peerSync.sync();
+    try {
+      return peerSync.sync();
+    } finally {
+      peerSync.close();
+    }
   }
   
   private void syncToMe(ZkController zkController, String collection,
@@ -265,6 +272,9 @@ public class SyncStrategy {
       public void run() {
         RequestRecovery recoverRequestCmd = new RequestRecovery();
         recoverRequestCmd.setAction(CoreAdminAction.REQUESTRECOVERY);
+        if (authCredentialsSource != null) {
+          recoverRequestCmd.setAuthCredentials(authCredentialsSource.getAuthCredentials());
+        }
         recoverRequestCmd.setCoreName(coreName);
         
         ;

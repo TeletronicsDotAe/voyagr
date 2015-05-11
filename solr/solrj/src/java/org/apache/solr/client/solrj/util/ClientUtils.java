@@ -17,6 +17,7 @@
 
 package org.apache.solr.client.solrj.util;
 
+import org.apache.solr.common.RequestPart;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.SolrInputField;
@@ -102,7 +103,7 @@ public class ClientUtils
 
   public static void writeXML( SolrInputDocument doc, Writer writer ) throws IOException
   {
-    writer.write("<doc boost=\""+doc.getDocumentBoost()+"\">");
+    writer.write("<doc " + RequestPart.PART_REF_KEY + "=\"" + doc.getUniquePartRef() + "\" boost=\""+doc.getDocumentBoost()+"\">");
 
     for( SolrInputField field : doc ) {
       float boost = field.getBoost();
@@ -158,13 +159,13 @@ public class ClientUtils
 
     if (update == null) {
       if( boost != 1.0f ) {
-        XML.writeXML(writer, "field", v.toString(), "name", name, "boost", boost);
+        XML.writeXML(writer, "field", v.toString(), "name", name, "boost", new Float(boost).toString());
       } else if (v != null) {
         XML.writeXML(writer, "field", v.toString(), "name", name );
       }
     } else {
       if( boost != 1.0f ) {
-        XML.writeXML(writer, "field", v.toString(), "name", name, "boost", boost, "update", update);
+        XML.writeXML(writer, "field", v.toString(), "name", name, "boost", new Float(boost).toString(), "update", update);
       } else {
         if (v == null)  {
           XML.writeXML(writer, "field", null, "name", name, "update", update, "null", true);

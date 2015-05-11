@@ -18,6 +18,8 @@ package org.apache.solr.client.solrj.impl;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Observable;
+import java.util.Observer;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
@@ -25,13 +27,15 @@ import org.apache.http.Header;
 import org.apache.http.HeaderElement;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpResponseInterceptor;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.params.ClientParamBean;
 import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.conn.scheme.Scheme;
@@ -45,9 +49,11 @@ import org.apache.http.impl.client.SystemDefaultHttpClient;
 import org.apache.http.impl.conn.PoolingClientConnectionManager;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager; // jdoc
 import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.HttpContext;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.security.AuthCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +61,9 @@ import org.slf4j.LoggerFactory;
  * Utility class for creating/configuring httpclient instances. 
  */
 public class HttpClientUtil {
+  
+  public static final String HTTP_CLIENTS_MUST_ADAPT_TO_CREDENTIALS_CHANGES = "httpClientsMustAdaptToCredentialsChanges";
+
   // socket timeout measured in ms, closes a socket if read
   // takes longer than x ms to complete. throws
   // java.net.SocketTimeoutException: Read timed out exception
@@ -73,11 +82,7 @@ public class HttpClientUtil {
   public static final String PROP_ALLOW_COMPRESSION = "allowCompression";
   // Follow redirects
   public static final String PROP_FOLLOW_REDIRECTS = "followRedirects";
-  // Basic auth username 
-  public static final String PROP_BASIC_AUTH_USER = "httpBasicAuthUser";
-  // Basic auth password 
-  public static final String PROP_BASIC_AUTH_PASS = "httpBasicAuthPassword";
-  
+
   public static final String SYS_PROP_CHECK_PEER_NAME = "solr.ssl.checkPeerName";
   
   private static final Logger logger = LoggerFactory
@@ -110,13 +115,7 @@ public class HttpClientUtil {
    *          configuration (no additional configuration) is created. 
    */
   public static CloseableHttpClient createClient(final SolrParams params) {
-    final ModifiableSolrParams config = new ModifiableSolrParams(params);
-    if (logger.isDebugEnabled()) {
-      logger.debug("Creating new http client, config:" + config);
-    }
-    final DefaultHttpClient httpClient = new SystemDefaultHttpClient();
-    configureClient(httpClient, config);
-    return httpClient;
+    return createClient(params, null);
   }
   
   /**
@@ -124,22 +123,58 @@ public class HttpClientUtil {
    * 
    */
   public static CloseableHttpClient createClient(final SolrParams params, ClientConnectionManager cm) {
+    return createClient(params, cm, null);
+  }
+
+  
+  /**
+   * Creates new http client by using the provided configuration.
+   * 
+   * @param params
+   *          http client configuration, if null a client with default
+   *          configuration (no additional configuration) is created that uses
+   *          mgr.
+   * @param authCredentials Credentials to be used for all requests issued through the HttpClient (null allowed)
+   */
+  public static CloseableHttpClient createClient(final SolrParams params, ClientConnectionManager cm, AuthCredentials authCredentials) {
     final ModifiableSolrParams config = new ModifiableSolrParams(params);
     if (logger.isDebugEnabled()) {
       logger.debug("Creating new http client, config:" + config);
     }
-    final DefaultHttpClient httpClient = new DefaultHttpClient(cm);
-    configureClient(httpClient, config);
+    CloseableHttpClient httpClient = (cm == null)?new SystemDefaultHttpClient():new DefaultHttpClient(cm);
+    if (Boolean.getBoolean(HTTP_CLIENTS_MUST_ADAPT_TO_CREDENTIALS_CHANGES) && authCredentials != null) {
+      httpClient = new CredentialsObservingHttpClientWrapper((DefaultHttpClient)httpClient, authCredentials);
+    }
+    configureClient(httpClient, config, authCredentials);
     return httpClient;
   }
-
+  
   /**
    * Configures {@link DefaultHttpClient}, only sets parameters if they are
    * present in config.
    */
-  public static void configureClient(final DefaultHttpClient httpClient,
-      SolrParams config) {
-    configurer.configure(httpClient,  config);
+  public static void configureClient(final HttpClient httpClient,
+      SolrParams config, AuthCredentials authCredentials) {
+    configurer.configure(httpClient, config, authCredentials);
+  }
+  
+  private static HttpClient getAcutalHttpClient(HttpClient httpClient) {
+    if (httpClient instanceof CredentialsObservingHttpClientWrapper) return ((CredentialsObservingHttpClientWrapper)httpClient).getWrappedHttpClient();
+    return httpClient;
+  }
+  
+  private static DefaultHttpClient getDefaultHttpClient(HttpClient httpClient) {
+    httpClient = getAcutalHttpClient(httpClient);
+    if (httpClient instanceof DefaultHttpClient) return (DefaultHttpClient)httpClient;
+    return null;
+  }
+  
+  public static CredentialsProvider getCredentialsProvider(HttpClient httpClient) {
+    DefaultHttpClient defaultHttpClient = getDefaultHttpClient(httpClient);
+    if (defaultHttpClient != null) {
+      return defaultHttpClient.getCredentialsProvider();
+    }    
+    return null;
   }
   
   public static void close(HttpClient httpClient) { 
@@ -157,32 +192,37 @@ public class HttpClientUtil {
    *          true will enable compression (needs support from server), false
    *          will disable compression.
    */
-  public static void setAllowCompression(DefaultHttpClient httpClient,
+  public static void setAllowCompression(HttpClient httpClient,
       boolean allowCompression) {
-    httpClient
+    DefaultHttpClient defaultHttpClient = getDefaultHttpClient(httpClient);
+    if (defaultHttpClient != null) {
+      defaultHttpClient
         .removeRequestInterceptorByClass(UseCompressionRequestInterceptor.class);
-    httpClient
+      defaultHttpClient
         .removeResponseInterceptorByClass(UseCompressionResponseInterceptor.class);
     if (allowCompression) {
-      httpClient.addRequestInterceptor(new UseCompressionRequestInterceptor());
-      httpClient
+        defaultHttpClient.addRequestInterceptor(new UseCompressionRequestInterceptor());
+        defaultHttpClient
           .addResponseInterceptor(new UseCompressionResponseInterceptor());
+    }
+    } else {
+      throw new RuntimeException("Setting allow-compression not allowed for " + HttpClient.class.getName() + " not based on " + DefaultHttpClient.class.getName());
     }
   }
 
   /**
-   * Set http basic auth information. If basicAuthUser or basicAuthPass is null
-   * the basic auth configuration is cleared. Currently this is not preemtive
-   * authentication. So it is not currently possible to do a post request while
-   * using this setting.
+   * Set http authentication credentials on the HttpClient to be used for all subsequent
+   * requests issued through this HttpClient. If it already had credentials set they will be cleared.
    */
-  public static void setBasicAuth(DefaultHttpClient httpClient,
-      String basicAuthUser, String basicAuthPass) {
-    if (basicAuthUser != null && basicAuthPass != null) {
-      httpClient.getCredentialsProvider().setCredentials(AuthScope.ANY,
-          new UsernamePasswordCredentials(basicAuthUser, basicAuthPass));
+  public static void setAuthCredentials(HttpClient httpClient, AuthCredentials authCredentials) {
+    if (authCredentials != null) {
+      if (httpClient instanceof CredentialsObservingHttpClientWrapper) {
+        ((CredentialsObservingHttpClientWrapper)httpClient).setAuthCredentials(authCredentials);
     } else {
-      httpClient.getCredentialsProvider().clear();
+        authCredentials.applyToHttpClient(httpClient);
+      }
+    } else {
+      AuthCredentials.clearCredentials(((DefaultHttpClient)httpClient).getCredentialsProvider());
     }
   }
 
@@ -236,19 +276,22 @@ public class HttpClientUtil {
    * Control retry handler 
    * @param useRetry when false the client will not try to retry failed requests.
    */
-  public static void setUseRetry(final DefaultHttpClient httpClient,
+  public static void setUseRetry(final HttpClient httpClient,
       boolean useRetry) {
+    DefaultHttpClient defaultHttpClient = getDefaultHttpClient(httpClient);
+    if (defaultHttpClient != null) {
     if (!useRetry) {
-      httpClient.setHttpRequestRetryHandler(NO_RETRY);
+      defaultHttpClient.setHttpRequestRetryHandler(NO_RETRY);
     } else {
-      // if the request is not fully sent, we retry
-      // streaming updates are not a problem, because they are not retryable
-      httpClient.setHttpRequestRetryHandler(new DefaultHttpRequestRetryHandler(){
+      defaultHttpClient.setHttpRequestRetryHandler(new DefaultHttpRequestRetryHandler(){
         @Override
         protected boolean handleAsIdempotent(final HttpRequest request) {
           return false; // we can't tell if a Solr request is idempotent
         }
       });
+    }
+    } else {
+      throw new RuntimeException("Setting use-retry not allowed for " + HttpClient.class.getName() + " not based on " + DefaultHttpClient.class.getName());
     }
   }
 
@@ -275,9 +318,10 @@ public class HttpClientUtil {
     new ClientParamBean(httpClient.getParams()).setHandleRedirects(followRedirects);
   }
 
-  public static void setHostNameVerifier(DefaultHttpClient httpClient,
+  public static void setHostNameVerifier(HttpClient httpClient,
       X509HostnameVerifier hostNameVerifier) {
-    Scheme httpsScheme = httpClient.getConnectionManager().getSchemeRegistry().get("https");
+    DefaultHttpClient defaultHttpClient = getDefaultHttpClient(httpClient);
+    Scheme httpsScheme = defaultHttpClient.getConnectionManager().getSchemeRegistry().get("https");
     if (httpsScheme != null) {
       SSLSocketFactory sslSocketFactory = (SSLSocketFactory) httpsScheme.getSchemeSocketFactory();
       sslSocketFactory.setHostnameVerifier(hostNameVerifier);
@@ -357,6 +401,68 @@ public class HttpClientUtil {
     public InputStream getContent() throws IOException, IllegalStateException {
       return new InflaterInputStream(wrappedEntity.getContent());
     }
+  }
+  
+  private static class CredentialsObservingHttpClientWrapper extends CloseableHttpClient implements Observer {
+    
+    private final DefaultHttpClient wrappedHttpClient;
+    private AuthCredentials authCredentials;
+    
+    public CredentialsObservingHttpClientWrapper(DefaultHttpClient wrappedHttpClient, AuthCredentials authCredentials) {
+      if (wrappedHttpClient == null) throw new RuntimeException(getClass() + " cannot be instantiated without a HttpClient to wrap");
+      if (authCredentials == null) throw new RuntimeException(getClass() + " cannot be instantiated without a AuthCredentials to observe");
+      this.wrappedHttpClient = wrappedHttpClient;
+      setAuthCredentials(authCredentials);
+    }
+    
+    private Object authCredentialsSyncObject = new Object();
+    
+    private void setAuthCredentials(AuthCredentials authCredentials) {
+      synchronized (authCredentialsSyncObject) {
+        if (this.authCredentials != null) this.authCredentials.deleteObserver(this); 
+        this.authCredentials = authCredentials;
+        if (authCredentials != null) {
+          authCredentials.addObserver(this);
+          authCredentials.applyToHttpClient(wrappedHttpClient);
+        } else {
+          AuthCredentials.clearCredentials(wrappedHttpClient.getCredentialsProvider());
+        }
+      }
+    }
+    
+    @Override
+    public void update(Observable observable, Object object) {
+      synchronized (authCredentialsSyncObject) {
+        if (this.authCredentials == observable) {
+          this.authCredentials.applyToHttpClient(wrappedHttpClient);
+        }
+      }
+    }
+    
+    private CloseableHttpClient getWrappedHttpClient() {
+      return wrappedHttpClient;
+    }
+    
+    @Override
+    public ClientConnectionManager getConnectionManager() {
+      return wrappedHttpClient.getConnectionManager();
+    }
+    
+    @Override
+    public HttpParams getParams() {
+      return wrappedHttpClient.getParams();
+    }
+
+    @Override
+    public void close() throws IOException {
+      wrappedHttpClient.close();
+    }
+
+    @Override
+    protected CloseableHttpResponse doExecute(HttpHost host, HttpRequest request, HttpContext context) throws IOException, ClientProtocolException {
+      return wrappedHttpClient.execute(host, request, context);
+    }
+    
   }
   
 }

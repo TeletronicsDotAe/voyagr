@@ -45,6 +45,8 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.handler.CheckBackupStatus;
 import org.junit.Test;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 /**
  * This test simply does a bunch of basic things in solrcloud mode and asserts things
  * work as expected.
@@ -156,6 +158,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
       createCmd.setCollection(ONE_NODE_COLLECTION);
       createCmd.setNumShards(1);
       createCmd.setDataDir(getDataDir(createTempDir(ONE_NODE_COLLECTION).toFile().getAbsolutePath()));
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
       client.request(createCmd);
     } catch (Exception e) {
       e.printStackTrace();
@@ -189,26 +192,26 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
       // add a doc
       SolrInputDocument doc = new SolrInputDocument();
       doc.addField("id", docs);
-      qclient.add(doc);
-      qclient.commit();
+      qclient.add(doc, -1, UPDATE_CREDENTIALS);
+      qclient.commit(UPDATE_CREDENTIALS);
 
 
-      QueryResponse results = qclient.query(query);
+      QueryResponse results = qclient.query(query, SEARCH_CREDENTIALS);
       assertEquals(docs - 1, results.getResults().getNumFound());
     }
     
     try (HttpSolrClient qclient = new HttpSolrClient(baseUrl + "/onenodecollection")) {
-      QueryResponse results = qclient.query(query);
+      QueryResponse results = qclient.query(query, SEARCH_CREDENTIALS);
       assertEquals(docs - 1, results.getResults().getNumFound());
 
       SolrInputDocument doc = new SolrInputDocument();
       doc.addField("id", docs + 1);
-      qclient.add(doc);
-      qclient.commit();
+      qclient.add(doc, -1, UPDATE_CREDENTIALS);
+      qclient.commit(UPDATE_CREDENTIALS);
 
       query = new SolrQuery("*:*");
       query.set("rows", 0);
-      results = qclient.query(query);
+      results = qclient.query(query, SEARCH_CREDENTIALS);
       assertEquals(docs, results.getResults().getNumFound());
     }
   }
@@ -221,7 +224,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.add("q", t1 + ":originalcontent");
-    QueryResponse results = clients.get(0).query(params);
+    QueryResponse results = clients.get(0).query(params, SEARCH_CREDENTIALS);
     assertEquals(1, results.getResults().getNumFound());
     
     // update doc
@@ -229,21 +232,22 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     commit();
     
-    results = clients.get(0).query(params);
+    results = clients.get(0).query(params, SEARCH_CREDENTIALS);
     assertEquals(0, results.getResults().getNumFound());
     
     params.set("q", t1 + ":updatedcontent");
     
-    results = clients.get(0).query(params);
+    results = clients.get(0).query(params, SEARCH_CREDENTIALS);
     assertEquals(1, results.getResults().getNumFound());
     
     UpdateRequest uReq = new UpdateRequest();
     // uReq.setParam(UpdateParams.UPDATE_CHAIN, DISTRIB_UPDATE_CHAIN);
+    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
     uReq.deleteById(Long.toString(docId)).process(clients.get(0));
     
     commit();
     
-    results = clients.get(0).query(params);
+    results = clients.get(0).query(params, SEARCH_CREDENTIALS);
     assertEquals(0, results.getResults().getNumFound());
     return docId;
   }
@@ -255,7 +259,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     commit();
     
     long deadShardCount = shardToJetty.get(SHARD2).get(0).client.solrClient
-        .query(query).getResults().getNumFound();
+        .query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
 
     query("q", "*:*", "sort", "n_tl1 desc");
     
@@ -275,18 +279,20 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
       // expected..
     }
     
+    downedClients.add(deadShard.client.solrClient);
+    
     commit();
     
     query("q", "*:*", "sort", "n_tl1 desc");
     
     // long cloudClientDocs = cloudClient.query(new
-    // SolrQuery("*:*")).getResults().getNumFound();
+    // SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     // System.out.println("clouddocs:" + cloudClientDocs);
     
     // try to index to a living shard at shard2
 
   
-    long numFound1 = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
+    long numFound1 = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     
     cloudClient.getZkStateReader().getLeaderRetry(DEFAULT_COLLECTION, SHARD1, 60000);
     index_specific(shardToJetty.get(SHARD1).get(1).client.solrClient, id, 1000, i1, 108, t1,
@@ -301,18 +307,19 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
 
     cloudClient.setDefaultCollection(DEFAULT_COLLECTION);
 
-    long numFound2 = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
+    long numFound2 = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     
     assertEquals(numFound1 + 1, numFound2);
     
     SolrInputDocument doc = new SolrInputDocument();
     doc.addField("id", 1001);
     
-    controlClient.add(doc);
+    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
     
     // try adding a doc with CloudSolrServer
     UpdateRequest ureq = new UpdateRequest();
     ureq.add(doc);
+    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     // ureq.setParam("update.chain", DISTRIB_UPDATE_CHAIN);
     
     try {
@@ -327,7 +334,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     query("q", "*:*", "sort", "n_tl1 desc");
     
-    long numFound3 = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
+    long numFound3 = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     
     // lets just check that the one doc since last commit made it in...
     assertEquals(numFound2 + 1, numFound3);
@@ -336,14 +343,14 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     testDebugQueries();
     
     if (VERBOSE) {
-      System.err.println(controlClient.query(new SolrQuery("*:*")).getResults()
+      System.err.println(controlClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
           .getNumFound());
       
       for (SolrClient client : clients) {
         try {
           SolrQuery q = new SolrQuery("*:*");
           q.set("distrib", false);
-          System.err.println(client.query(q).getResults()
+          System.err.println(client.query(q, SEARCH_CREDENTIALS).getResults()
               .getNumFound());
         } catch (Exception e) {
           
@@ -356,6 +363,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     
     // this should trigger a recovery phase on deadShard
     ChaosMonkey.start(deadShard.jetty);
+    downedClients.remove(deadShard.client.solrClient);
     
     // make sure we have published we are recovering
     Thread.sleep(1500);
@@ -363,7 +371,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     waitForRecoveriesToFinish(false);
     
     deadShardCount = shardToJetty.get(SHARD1).get(0).client.solrClient
-        .query(query).getResults().getNumFound();
+        .query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     // if we properly recovered, we should now have the couple missing docs that
     // came in while shard was down
     checkShardConsistency(true, false);
@@ -375,9 +383,10 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     for (int i = 0; i < 226; i++) {
       doc = new SolrInputDocument();
       doc.addField("id", 2000 + i);
-      controlClient.add(doc);
+      controlClient.add(doc, -1, UPDATE_CREDENTIALS);
       ureq = new UpdateRequest();
       ureq.add(doc);
+      ureq.setAuthCredentials(UPDATE_CREDENTIALS);
       // ureq.setParam("update.chain", DISTRIB_UPDATE_CHAIN);
       ureq.process(cloudClient);
     }
@@ -408,6 +417,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     params.set("location", location.toString());
 
     QueryRequest request = new QueryRequest(params);
+    request.setAuthCredentials(ALL_CREDENTIALS);
     client.request(request);
     
     checkForBackupSuccess(client, location);
@@ -434,11 +444,11 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
     // how many docs are on the new shard?
     for (CloudJettyRunner cjetty : shardToJetty.get(SHARD1)) {
       if (VERBOSE) System.err.println("shard1 total:"
-          + cjetty.client.solrClient.query(new SolrQuery("*:*")).getResults().getNumFound());
+          + cjetty.client.solrClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound());
     }
     for (CloudJettyRunner cjetty : shardToJetty.get(SHARD2)) {
       if (VERBOSE) System.err.println("shard2 total:"
-          + cjetty.client.solrClient.query(new SolrQuery("*:*")).getResults().getNumFound());
+          + cjetty.client.solrClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound());
     }
     
     checkShardConsistency(SHARD1);

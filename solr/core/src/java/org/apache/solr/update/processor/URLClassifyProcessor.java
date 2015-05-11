@@ -88,7 +88,7 @@ public class URLClassifyProcessor extends UpdateRequestProcessor {
       SolrQueryRequest request,
       SolrQueryResponse response,
       UpdateRequestProcessor nextProcessor) {
-    super(nextProcessor);
+    super(nextProcessor, request, response);
     
     this.initParameters(parameters);
   }

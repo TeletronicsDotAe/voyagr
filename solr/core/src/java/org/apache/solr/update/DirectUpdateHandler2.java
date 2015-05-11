@@ -31,7 +31,15 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.util.BytesRef;
+import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrException.ErrorCode;
+import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.exceptions.WrongUsage;
+import org.apache.solr.common.exceptions.update.DocumentAlreadyExists;
+import org.apache.solr.common.exceptions.update.DocumentDoesNotExist;
+import org.apache.solr.common.exceptions.update.VersionConflict;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
@@ -49,6 +57,7 @@ import org.apache.solr.search.QueryUtils;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.SyntaxError;
 import org.apache.solr.search.function.ValueSourceRangeFilter;
+import org.apache.solr.update.processor.DistributedUpdateProcessor;
 import org.apache.solr.util.RefCounted;
 
 import java.io.IOException;
@@ -90,13 +99,18 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   // tracks when auto-commit should occur
   protected final CommitTracker commitTracker;
   protected final CommitTracker softCommitTracker;
+  protected final UpdateSemanticsMode configedSemanticsMode;
   
   protected boolean commitWithinSoftCommit;
 
   protected boolean indexWriterCloseWaitsForMerges;
   
-  public DirectUpdateHandler2(SolrCore core) {
-    super(core);
+  public DirectUpdateHandler2(SolrCore core) throws SolrServerException {
+    this(core, null);
+  }
+  
+  public DirectUpdateHandler2(SolrCore core, UpdateHandler updateHandler) throws SolrServerException {
+    super(core, (updateHandler != null)?updateHandler.getUpdateLog():null);
    
     solrCoreState = core.getSolrCoreState();
     
@@ -108,37 +122,32 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     
     int softCommitDocsUpperBound = updateHandlerInfo.autoSoftCommmitMaxDocs; // getInt("updateHandler/autoSoftCommit/maxDocs", -1);
     int softCommitTimeUpperBound = updateHandlerInfo.autoSoftCommmitMaxTime; // getInt("updateHandler/autoSoftCommit/maxTime", -1);
-    softCommitTracker = new CommitTracker("Soft", core, softCommitDocsUpperBound, softCommitTimeUpperBound, true, true);
+    softCommitTracker = new CommitTracker("Soft", core, softCommitDocsUpperBound, softCommitTimeUpperBound, (updateHandler != null)?updateHandlerInfo.openSearcher:true, true);
     
     commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
     indexWriterCloseWaitsForMerges = updateHandlerInfo.indexWriterCloseWaitsForMerges;
 
-
-  }
+    UpdateSemanticsMode semanticsModeToUse;
+    semanticsModeToUse = UpdateSemanticsMode.fromString(updateHandlerInfo.semanticsMode);
+    if (semanticsModeToUse == null) {
+      log.info("Semantics-mode not explitictly set. Using default");
+      semanticsModeToUse = UpdateSemanticsMode.getDefault();
+    }
+    configedSemanticsMode = semanticsModeToUse;
+    log.info("Using semantics-mode: " + configedSemanticsMode.toString());
   
-  public DirectUpdateHandler2(SolrCore core, UpdateHandler updateHandler) {
-    super(core, updateHandler.getUpdateLog());
-    solrCoreState = core.getSolrCoreState();
-    
-    UpdateHandlerInfo updateHandlerInfo = core.getSolrConfig()
-        .getUpdateHandlerInfo();
-    int docsUpperBound = updateHandlerInfo.autoCommmitMaxDocs; // getInt("updateHandler/autoCommit/maxDocs", -1);
-    int timeUpperBound = updateHandlerInfo.autoCommmitMaxTime; // getInt("updateHandler/autoCommit/maxTime", -1);
-    commitTracker = new CommitTracker("Hard", core, docsUpperBound, timeUpperBound, updateHandlerInfo.openSearcher, false);
-    
-    int softCommitDocsUpperBound = updateHandlerInfo.autoSoftCommmitMaxDocs; // getInt("updateHandler/autoSoftCommit/maxDocs", -1);
-    int softCommitTimeUpperBound = updateHandlerInfo.autoSoftCommmitMaxTime; // getInt("updateHandler/autoSoftCommit/maxTime", -1);
-    softCommitTracker = new CommitTracker("Soft", core, softCommitDocsUpperBound, softCommitTimeUpperBound, updateHandlerInfo.openSearcher, true);
-    
-    commitWithinSoftCommit = updateHandlerInfo.commitWithinSoftCommit;
-    indexWriterCloseWaitsForMerges = updateHandlerInfo.indexWriterCloseWaitsForMerges;
-
+    if (updateHandler != null) {
     UpdateLog existingLog = updateHandler.getUpdateLog();
     if (this.ulog != null && this.ulog == existingLog) {
       // If we are reusing the existing update log, inform the log that its update handler has changed.
       // We do this as late as possible.
       this.ulog.init(this, core);
     }
+    }
+
+    UpdateSemanticsMode.RuleAndReason rar;
+    if ((rar = configedSemanticsMode.requireUniqueKeyFieldInSchema()).ruleEnforced && idField == null) throw new SolrServerException(rar.reason);
+    if ((rar = configedSemanticsMode.requireUpdateLog()).ruleEnforced && ulog == null) throw new SolrServerException(rar.reason);
   }
 
   private void deleteAll() throws IOException {
@@ -159,6 +168,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
 
   @Override
   public int addDoc(AddUpdateCommand cmd) throws IOException {
+    long startTimeNanosecs = System.nanoTime();
     try {
       return addDoc0(cmd);
     } catch (SolrException e) {
@@ -167,6 +177,8 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
           String.format(Locale.ROOT, "Exception writing document id %s to the index; possible analysis error.",
           cmd.getPrintableId()), t);
+    } finally {
+      DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDoc(startTimeNanosecs);
     }
   }
 
@@ -177,6 +189,23 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
    * @return the count.
    */
   private int addDoc0(AddUpdateCommand cmd) throws IOException {
+    UpdateSemanticsMode semanticsMode = getSemanticsMode(cmd);
+    
+    if (semanticsMode.isClassicUpdate(cmd)) {
+      // if there is no uniqueKey field, don't overwrite
+      if( idField == null ) {
+        cmd.classicOverwrite = false;
+      }
+    }
+    
+    SchemaField versionField = cmd.getReq().getSchema().getFieldOrNull(SolrInputDocument.VERSION_FIELD);
+    BytesRef indexedId = cmd.getIndexedId();
+    String id = cmd.getPrintableId(null);
+    UpdateSemanticsMode.RuleAndReason rar;
+    if ((rar = semanticsMode.requireUniqueKeyFieldInSchemaAndDoc(cmd)).ruleEnforced && (idField == null || id == null)) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+    if ((rar = semanticsMode.requireVersionFieldInSchema(cmd)).ruleEnforced && versionField == null) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+    if ((rar = semanticsMode.requireUpdateLog(cmd)).ruleEnforced && ulog == null) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+
     int rc = -1;
     RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
     try {
@@ -184,15 +213,30 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       addCommands.incrementAndGet();
       addCommandsCumulative.incrementAndGet();
       
-      // if there is no ID field, don't overwrite
-      if (idField == null) {
-        cmd.overwrite = false;
+      boolean getAndCheckAgainstExisting = semanticsMode.needToGetAndCheckAgainstExistingDocument(cmd) && cmd.isLeaderLogic();
+      
+      if (getAndCheckAgainstExisting) {
+    	// here we do not need latest version originating from delete, because this
+    	// is not used for reorder check
+        Long currentVersion = ulog.lookupVersion(indexedId, DistributedUpdateProcessor.updateStats.getDirectUpdateHandler2AddDocUpdateLogLookupVersionStatsEntries());
+        if (currentVersion == null) currentVersion = -1L;
+        
+        // TODO actually by currentVersion < 0 we do not know that it does not exist. It may exist but have no version field
+        if (currentVersion < 0 && (rar = semanticsMode.requireExistingDocument(cmd)).ruleEnforced) throw new DocumentDoesNotExist(ErrorCode.CONFLICT, rar.reason);
+        if (currentVersion >= 0) {
+          if ((rar = semanticsMode.requireNoExistingDocument(cmd)).ruleEnforced) throw new DocumentAlreadyExists(ErrorCode.CONFLICT, rar.reason);
+          if (semanticsMode.requireVersionCheck(cmd) && currentVersion != cmd.getRequestVersion()) {
+            VersionConflict versionConflict = new VersionConflict(ErrorCode.CONFLICT, "Attempt to update document with uniqueKey " + id + " failed. Version in document to be updated " + cmd.getRequestVersion() + " does not match current version " + currentVersion);
+            versionConflict.setCurrentVersion(currentVersion);
+            throw versionConflict;
+          }
+        }
       }
       
       try {
         IndexSchema schema = cmd.getReq().getSchema();
         
-        if (cmd.overwrite) {
+        if (semanticsMode.needToDeleteOldVersionOfDocument(cmd)) {
           
           // Check for delete by query commands newer (i.e. reordered). This
           // should always be null on a leader
@@ -216,7 +260,9 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
               }
             }
             
+            long startTimeAddAndDeleteNanosecs = System.nanoTime();
             addAndDelete(cmd, dbqList);
+            DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDocAddAndDelete(startTimeAddAndDeleteNanosecs);
           } else {
             // normal update
             
@@ -231,6 +277,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
               updateTerm = cmd.updateTerm;
             }
 
+            long startTimeWriterUpdateDocNanosecs = System.nanoTime();
             if (cmd.isBlock()) {
               writer.updateDocuments(updateTerm, cmd);
             } else {
@@ -238,6 +285,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
               // SolrCore.verbose("updateDocument",updateTerm,luceneDocument,writer);
               writer.updateDocument(updateTerm, luceneDocument);
             }
+            DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDocWriterUpdateDocument(startTimeWriterUpdateDocNanosecs);
             // SolrCore.verbose("updateDocument",updateTerm,"DONE");
             
             if (del) { // ensure id remains unique
@@ -245,7 +293,9 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
               bq.add(new BooleanClause(new TermQuery(updateTerm),
                   Occur.MUST_NOT));
               bq.add(new BooleanClause(new TermQuery(idTerm), Occur.MUST));
+              long startTimeWriterDeleteDocNanosecs = System.nanoTime();
               writer.deleteDocuments(new DeleteByQueryWrapper(bq, core.getLatestSchema()));
+              DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDocWriterDeleteDocument(startTimeWriterDeleteDocNanosecs);
             }
             
             // Add to the transaction log *after* successfully adding to the
@@ -255,18 +305,27 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
             // This also ensures that if a commit sneaks in-between, that we
             // know everything in a particular
             // log version was definitely committed.
-            if (ulog != null) ulog.add(cmd);
+            if (ulog != null) {
+              long startTimeULogAddNanosecs = System.nanoTime();
+              ulog.add(cmd);
+              DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDocUlogAdd(startTimeULogAddNanosecs);
+            }
           }
-          
         } else {
           // allow duplicates
+          long startTimeWriterAddDocNanosecs = System.nanoTime();
           if (cmd.isBlock()) {
             writer.addDocuments(cmd);
           } else {
             writer.addDocument(cmd.getLuceneDocument());
           }
+          DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDocWriterAddDocument(startTimeWriterAddDocNanosecs);
 
-          if (ulog != null) ulog.add(cmd);
+          if (ulog != null) {
+            long startTimeULogAddNanosecs = System.nanoTime();
+            ulog.add(cmd);
+            DistributedUpdateProcessor.updateStats.registerDirectUpdateHandler2AddDocUlogAdd(startTimeULogAddNanosecs);
+          }
         }
         
         if ((cmd.getFlags() & UpdateCommand.IGNORE_AUTOCOMMIT) == 0) {
@@ -318,6 +377,35 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   // we don't return the number of docs deleted because it's not always possible to quickly know that info.
   @Override
   public void delete(DeleteUpdateCommand cmd) throws IOException {
+    UpdateSemanticsMode semanticsMode = getSemanticsMode(cmd);
+    
+    SchemaField versionField = cmd.getReq().getSchema().getFieldOrNull(SolrInputDocument.VERSION_FIELD);
+    BytesRef indexedId = cmd.getIndexedId();
+    String id = cmd.getId();
+    UpdateSemanticsMode.RuleAndReason rar;
+    if ((rar = semanticsMode.requireUniqueKeyFieldInSchemaAndDoc(cmd)).ruleEnforced && (idField == null || id == null)) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+    if ((rar = semanticsMode.requireVersionFieldInSchema(cmd)).ruleEnforced && versionField == null) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+    if ((rar = semanticsMode.requireUpdateLog(cmd)).ruleEnforced && ulog == null) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+    
+    boolean getAndCheckAgainstExisting = semanticsMode.needToGetAndCheckAgainstExistingDocument(cmd) && cmd.isLeaderLogic();
+    
+    if (getAndCheckAgainstExisting) {
+      // here we do not need latest version originating from delete, because this
+      // is not used for reorder check
+      Long currentVersion = ulog.lookupVersion(indexedId, null);
+      if (currentVersion == null) currentVersion = -1L;
+      
+      if (currentVersion < 0 && (rar = semanticsMode.requireExistingDocument(cmd)).ruleEnforced) throw new DocumentDoesNotExist(ErrorCode.CONFLICT, rar.reason);
+      if (currentVersion >= 0) {
+        if ((rar = semanticsMode.requireNoExistingDocument(cmd)).ruleEnforced) throw new DocumentAlreadyExists(ErrorCode.CONFLICT, rar.reason);
+        if (semanticsMode.requireVersionCheck(cmd) && currentVersion != cmd.getRequestVersion()) {
+          VersionConflict versionConflict = new VersionConflict(ErrorCode.CONFLICT, "Attempt to update document with uniqueKey " + id + " failed. Version in document to be updated " + cmd.getRequestVersion() + " does not match current version " + currentVersion);
+          versionConflict.setCurrentVersion(currentVersion);
+          throw versionConflict;
+        }
+      }
+    }
+    
     deleteByIdCommands.incrementAndGet();
     deleteByIdCommandsCumulative.incrementAndGet();
 
@@ -461,7 +549,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     mergeIndexesCommands.incrementAndGet();
     int rc;
 
-    log.info("start " + cmd);
+    log.debug("start " + cmd);
     
     List<DirectoryReader> readers = cmd.readers;
     if (readers != null && readers.size() > 0) {
@@ -481,7 +569,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     } else {
       rc = 0;
     }
-    log.info("end_mergeIndexes");
+    log.debug("end_mergeIndexes");
 
     // TODO: consider soft commit issues
     if (rc == 1 && commitTracker.getTimeUpperBound() > 0) {
@@ -498,7 +586,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     boolean error=true;
 
     try {
-      log.info("start "+cmd);
+      log.debug("start "+cmd);
       RefCounted<IndexWriter> iw = solrCoreState.getIndexWriter(core);
       try {
         final Map<String,String> commitData = new HashMap<>();
@@ -510,7 +598,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
         iw.decref();
       }
 
-      log.info("end_prepareCommit");
+      log.debug("end_prepareCommit");
 
       error=false;
     }
@@ -545,7 +633,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
         solrCoreState.getCommitLock().lock();
       }
 
-      log.info("start "+cmd);
+      log.debug("start "+cmd);
 
       // We must cancel pending commits *before* we actually execute the commit.
 
@@ -585,7 +673,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
             writer.setCommitData(commitData);
             writer.commit();
           } else {
-            log.info("No uncommitted changes. Skipping IW.commit.");
+            log.debug("No uncommitted changes. Skipping IW.commit.");
           }
 
           // SolrCore.verbose("writer.commit() end");
@@ -634,7 +722,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
         commitTracker.didCommit();
       }
       
-      log.info("end_commit_flush");
+      log.debug("end_commit_flush");
 
       error=false;
     }
@@ -679,7 +767,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
     boolean error=true;
 
     try {
-      log.info("start "+cmd);
+      log.debug("start "+cmd);
 
       rollbackWriter();
 
@@ -689,7 +777,7 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       commitTracker.didRollback();
       softCommitTracker.didRollback();
       
-      log.info("end_rollback");
+      log.debug("end_rollback");
 
       error=false;
     }
@@ -707,6 +795,11 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
   @Override
   public UpdateLog getUpdateLog() {
     return ulog;
+  }
+
+  @Override
+  public boolean requireUniqueKeyFieldInDocument(AddUpdateCommand cmd) {
+  	return getSemanticsMode(cmd).requireUniqueKeyFieldInSchemaAndDoc(cmd).ruleEnforced;
   }
 
   @Override
@@ -882,6 +975,17 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       lst.add("transaction_logs_total_number", ulog.getTotalLogsNumber());
     }
     return lst;
+  }
+
+  protected UpdateSemanticsMode getSemanticsMode(UpdateCommand cmd) {
+    UpdateSemanticsMode semanticsMode = configedSemanticsMode;
+    if (cmd.getSemanticsMode() != null && cmd.getSemanticsMode() != configedSemanticsMode) {
+      semanticsMode = cmd.getSemanticsMode();
+      UpdateSemanticsMode.RuleAndReason rar;
+      if ((rar = configedSemanticsMode.requireUniqueKeyFieldInSchema()).ruleEnforced && idField == null) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+      if ((rar = configedSemanticsMode.requireUpdateLog()).ruleEnforced && ulog == null) throw new WrongUsage(ErrorCode.UNPROCESSABLE_ENTITY, rar.reason);
+    }
+    return semanticsMode;
   }
 
   @Override

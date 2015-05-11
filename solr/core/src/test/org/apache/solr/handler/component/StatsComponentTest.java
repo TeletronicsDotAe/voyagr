@@ -70,7 +70,7 @@ public class StatsComponentTest extends AbstractSolrTestCase {
     super.setUp();
     clearIndex();
     assertU(commit());
-    lrf = h.getRequestFactory("standard", 0, 20);
+    lrf = h.getRequestInfoFactory("standard", 0, 20);
   }
 
   public void testStats() throws Exception {

@@ -54,6 +54,10 @@ import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -326,13 +330,13 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     query(false, new Object[] {"q", "id:[1 TO 5]", CommonParams.DEBUG, CommonParams.QUERY});
 
     // try commitWithin
-    long before = cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound();
+    long before = cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.set("commitWithin", 10);
     add(cloudClient, params , getDoc("id", 300));
     
     long timeout = System.currentTimeMillis() + 45000;
-    while (cloudClient.query(new SolrQuery("*:*")).getResults().getNumFound() != before + 1) {
+    while (cloudClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound() != before + 1) {
       if (timeout <= System.currentTimeMillis()) {
         fail("commitWithin did not work");
       }
@@ -340,7 +344,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     }
     
     for (SolrClient client : clients) {
-      assertEquals("commitWithin did not work on node: " + ((HttpSolrClient)client).getBaseURL(), before + 1, client.query(new SolrQuery("*:*")).getResults().getNumFound());
+      assertEquals("commitWithin did not work on node: " + ((HttpSolrClient)client).getBaseURL(), before + 1, client.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound());
     }
     
     // TODO: This test currently fails because debug info is obtained only
@@ -371,6 +375,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
   
   private void testFailedCoreCreateCleansUp() throws Exception {
     Create createCmd = new Create();
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     createCmd.setCoreName("core1");
     createCmd.setCollection("the_core_collection");
     String coredataDir = createTempDir().toFile().getAbsolutePath();
@@ -409,7 +414,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       Collections.shuffle(solrclients, random());
       for (SolrClient client : solrclients) {
         query.set("shards", shard);
-        long numDocs = client.query(query).getResults().getNumFound();
+        long numDocs = client.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
         assertTrue("numDocs < 0 for shard "+shard+" via "+client,
                    0 <= numDocs);
         if (!shardCounts.containsKey(shard)) {
@@ -433,7 +438,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
             replicaAlts.add(replica);
           }
 
-          numDocs = client.query(query).getResults().getNumFound();
+          numDocs = client.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
           assertTrue("numDocs < 0 for replica "+replica+" via "+client,
                      0 <= numDocs);
           assertEquals("inconsitent numDocs for shard "+shard+
@@ -444,7 +449,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
         // any combination of replica alternatives should give same numDocs
         String replicas = StringUtils.join(replicaAlts.toArray(), "|");
         query.set("shards", replicas);
-        numDocs = client.query(query).getResults().getNumFound();
+        numDocs = client.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
         assertTrue("numDocs < 0 for replicas "+replicas+" via "+client,
                    0 <= numDocs);
           assertEquals("inconsitent numDocs for replicas "+replicas+
@@ -482,7 +487,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     for (SolrClient client : this.clients) {
       assertEquals("numDocs for "+randShards+" via "+client,
                    randomShardCountsExpected, 
-                   client.query(query).getResults().getNumFound());
+                   client.query(query, SEARCH_CREDENTIALS).getResults().getNumFound());
     }
 
     // total num docs must match sum of every shard's numDocs
@@ -494,7 +499,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     for (SolrClient client : clients) {
       assertEquals("sum of shard numDocs on client: " + client, 
                    totalShardNumDocs,
-                   client.query(query).getResults().getNumFound());
+                   client.query(query, SEARCH_CREDENTIALS).getResults().getNumFound());
     }
     assertTrue("total numDocs <= 0, WTF? Test is useless",
                0 < totalShardNumDocs);
@@ -545,6 +550,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
         @Override
         public void run() {
           Create createCmd = new Create();
+          createCmd.setAuthCredentials(ALL_CREDENTIALS);
           createCmd.setCoreName(collection + freezeI);
           createCmd.setCollection(collection);
 
@@ -592,6 +598,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     }
     params.set("name", collectionName);
     SolrRequest request = new QueryRequest(params);
+    request.setAuthCredentials(SEARCH_CREDENTIALS);
     request.setPath("/admin/collections");
 
     CollectionAdminResponse res = new CollectionAdminResponse();
@@ -645,7 +652,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       addFields(doc, id, i, fieldA, val, fieldB, val);
       UpdateResponse ures = add(updateClient, updateParams, doc);
       assertEquals(chain + ": update failed", 0, ures.getStatus());
-      ures = updateClient.commit();
+      ures = updateClient.commit(UPDATE_CREDENTIALS);
       assertEquals(chain + ": commit failed", 0, ures.getStatus());
     }
 
@@ -678,7 +685,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     ignoreException("version conflict");
     for (SolrClient client : clients) {
       try {
-        client.add(sd);
+        client.add(sd, -1, UPDATE_CREDENTIALS);
         fail();
       } catch (SolrException e) {
         assertEquals(409, e.code());
@@ -689,17 +696,18 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     // TODO: test deletes.  SolrJ needs a good way to pass version for delete...
 
     sd =  sdoc("id", 1000, "foo_i",5);
-    clients.get(0).add(sd);
+    clients.get(0).add(sd, -1, UPDATE_CREDENTIALS);
 
     List<Integer> expected = new ArrayList<>();
     int val = 0;
     for (SolrClient client : clients) {
       val += 10;
-      client.add(sdoc("id", 1000, "val_i", map("add",val), "foo_i",val));
+      client.add(sdoc("id", 1000, "val_i", map("add",val), "foo_i",val), -1, UPDATE_CREDENTIALS);
       expected.add(val);
     }
 
     QueryRequest qr = new QueryRequest(params("qt", "/get", "id","1000"));
+    qr.setAuthCredentials(SEARCH_CREDENTIALS);
     for (SolrClient client : clients) {
       val += 10;
       NamedList rsp = client.request(qr);
@@ -717,6 +725,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     up.addFile(getFile("books_numeric_ids.csv"), "application/csv");
     up.setCommitWithin(900000);
     up.setAction(AbstractUpdateRequest.ACTION.COMMIT, true, true);
+    up.setAuthCredentials(UPDATE_CREDENTIALS);
     NamedList<Object> result = clients.get(0).request(up);
     
     long endCommits = getNumCommits((HttpSolrClient) clients.get(0));
@@ -733,6 +742,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       params.set("qt", "/admin/mbeans?key=updateHandler&stats=true");
       // use generic request to avoid extra processing of queries
       QueryRequest req = new QueryRequest(params);
+      req.setAuthCredentials(SEARCH_CREDENTIALS);
       NamedList<Object> resp = client.request(req);
       NamedList mbeans = (NamedList) resp.get("solr-mbeans");
       NamedList uhandlerCat = (NamedList) mbeans.get("UPDATEHANDLER");
@@ -778,21 +788,21 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
    // TODO: enable when we don't falsely get slice1...
    // solrj.getZkStateReader().getLeaderUrl(oneInstanceCollection2, "slice1", 30000);
    // solrj.getZkStateReader().getLeaderUrl(oneInstanceCollection2, "slice2", 30000);
-    client2.add(getDoc(id, "1")); 
-    client3.add(getDoc(id, "2")); 
-    client4.add(getDoc(id, "3")); 
+    client2.add(getDoc(id, "1"), -1, UPDATE_CREDENTIALS); 
+    client3.add(getDoc(id, "2"), -1, UPDATE_CREDENTIALS); 
+    client4.add(getDoc(id, "3"), -1, UPDATE_CREDENTIALS); 
     
-    client1.commit();
+    client1.commit(UPDATE_CREDENTIALS);
     SolrQuery query = new SolrQuery("*:*");
     query.set("distrib", false);
-    long oneDocs = client1.query(query).getResults().getNumFound();
-    long twoDocs = client2.query(query).getResults().getNumFound();
-    long threeDocs = client3.query(query).getResults().getNumFound();
-    long fourDocs = client4.query(query).getResults().getNumFound();
+    long oneDocs = client1.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long twoDocs = client2.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long threeDocs = client3.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long fourDocs = client4.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     
     query.set("collection", oneInstanceCollection2);
     query.set("distrib", true);
-    long allDocs = getCommonCloudSolrClient().query(query).getResults().getNumFound();
+    long allDocs = getCommonCloudSolrClient().query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     
 //    System.out.println("1:" + oneDocs);
 //    System.out.println("2:" + twoDocs);
@@ -821,6 +831,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       unloadClient.setConnectionTimeout(15000);
       unloadClient.setSoTimeout(60000);
       Unload unloadCmd = new Unload(true);
+      unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
       unloadCmd.setCoreName(props.getCoreName());
 
       String leader = props.getCoreUrl();
@@ -852,7 +863,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     // we should get mapped to the right core
     try (SolrClient client1 = createNewSolrClient(oneInstanceCollection, baseUrl)) {
       SolrQuery query = new SolrQuery("*:*");
-      long oneDocs = client1.query(query).getResults().getNumFound();
+      long oneDocs = client1.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
       assertEquals(3, oneDocs);
     }
   }
@@ -869,7 +880,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     // we should get mapped to the right core
     // test hitting an update url
     try (SolrClient client1 = createNewSolrClient(oneInstanceCollection, baseUrl)) {
-      client1.commit();
+      client1.commit(UPDATE_CREDENTIALS);
     }
   }
 
@@ -901,21 +912,21 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     waitForRecoveriesToFinish(oneInstanceCollection, getCommonCloudSolrClient().getZkStateReader(), false);
     assertAllActive(oneInstanceCollection, getCommonCloudSolrClient().getZkStateReader());
     
-    client2.add(getDoc(id, "1")); 
-    client3.add(getDoc(id, "2")); 
-    client4.add(getDoc(id, "3")); 
+    client2.add(getDoc(id, "1"), -1, UPDATE_CREDENTIALS); 
+    client3.add(getDoc(id, "2"), -1, UPDATE_CREDENTIALS); 
+    client4.add(getDoc(id, "3"), -1, UPDATE_CREDENTIALS); 
     
-    client1.commit();
+    client1.commit(UPDATE_CREDENTIALS);
     SolrQuery query = new SolrQuery("*:*");
     query.set("distrib", false);
-    long oneDocs = client1.query(query).getResults().getNumFound();
-    long twoDocs = client2.query(query).getResults().getNumFound();
-    long threeDocs = client3.query(query).getResults().getNumFound();
-    long fourDocs = client4.query(query).getResults().getNumFound();
+    long oneDocs = client1.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long twoDocs = client2.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long threeDocs = client3.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long fourDocs = client4.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     
     query.set("collection", oneInstanceCollection);
     query.set("distrib", true);
-    long allDocs = getCommonCloudSolrClient().query(query).getResults().getNumFound();
+    long allDocs = getCommonCloudSolrClient().query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     
 //    System.out.println("1:" + oneDocs);
 //    System.out.println("2:" + twoDocs);
@@ -958,6 +969,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
           if (shardId != null) {
             createCmd.setShardId(shardId);
           }
+          createCmd.setAuthCredentials(ALL_CREDENTIALS);
           client.request(createCmd);
         } catch (Exception e) {
           e.printStackTrace();
@@ -990,53 +1002,52 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     indexDoc("collection2", getDoc(id, "10000001")); 
     indexDoc("collection2", getDoc(id, "10000003"));
     getCommonCloudSolrClient().setDefaultCollection("collection2");
-    getCommonCloudSolrClient().add(getDoc(id, "10000004"));
+    getCommonCloudSolrClient().add(getDoc(id, "10000004"), -1, UPDATE_CREDENTIALS);
     getCommonCloudSolrClient().setDefaultCollection(null);
     
     indexDoc("collection3", getDoc(id, "20000000"));
     indexDoc("collection3", getDoc(id, "20000001")); 
     getCommonCloudSolrClient().setDefaultCollection("collection3");
-    getCommonCloudSolrClient().add(getDoc(id, "10000005"));
+    getCommonCloudSolrClient().add(getDoc(id, "10000005"), -1, UPDATE_CREDENTIALS);
     getCommonCloudSolrClient().setDefaultCollection(null);
     
-    otherCollectionClients.get("collection2").get(0).commit();
-    otherCollectionClients.get("collection3").get(0).commit();
+    otherCollectionClients.get("collection2").get(0).commit(UPDATE_CREDENTIALS);
+    otherCollectionClients.get("collection3").get(0).commit(UPDATE_CREDENTIALS);
     
     getCommonCloudSolrClient().setDefaultCollection("collection1");
-    long collection1Docs = getCommonCloudSolrClient().query(new SolrQuery("*:*")).getResults()
+    long collection1Docs = getCommonCloudSolrClient().query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
         .getNumFound();
-
     long collection2Docs = otherCollectionClients.get("collection2").get(0)
-        .query(new SolrQuery("*:*")).getResults().getNumFound();
+        .query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     System.out.println("found2: "+ collection2Docs);
     long collection3Docs = otherCollectionClients.get("collection3").get(0)
-        .query(new SolrQuery("*:*")).getResults().getNumFound();
+        .query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound();
     System.out.println("found3: "+ collection3Docs);
     
     SolrQuery query = new SolrQuery("*:*");
     query.set("collection", "collection2,collection3");
-    long found = clients.get(0).query(query).getResults().getNumFound();
+    long found = clients.get(0).query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(collection2Docs + collection3Docs, found);
     
     query = new SolrQuery("*:*");
     query.set("collection", "collection1,collection2,collection3");
-    found = clients.get(0).query(query).getResults().getNumFound();
+    found = clients.get(0).query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(collection1Docs + collection2Docs + collection3Docs, found);
     
     // try to search multiple with cloud client
-    found = getCommonCloudSolrClient().query(query).getResults().getNumFound();
+    found = getCommonCloudSolrClient().query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(collection1Docs + collection2Docs + collection3Docs, found);
     
     query.set("collection", "collection2,collection3");
-    found = getCommonCloudSolrClient().query(query).getResults().getNumFound();
+    found = getCommonCloudSolrClient().query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(collection2Docs + collection3Docs, found);
     
     query.set("collection", "collection3");
-    found = getCommonCloudSolrClient().query(query).getResults().getNumFound();
+    found = getCommonCloudSolrClient().query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(collection3Docs, found);
     
     query.remove("collection");
-    found = getCommonCloudSolrClient().query(query).getResults().getNumFound();
+    found = getCommonCloudSolrClient().query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
     assertEquals(collection1Docs, found);
     
     assertEquals(collection3Docs, collection2Docs - 1);
@@ -1052,7 +1063,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     List<SolrClient> clients = otherCollectionClients.get(collection);
     int which = (doc.getField(id).toString().hashCode() & 0x7fffffff) % clients.size();
     SolrClient client = clients.get(which);
-    client.add(doc);
+    client.add(doc, -1 , UPDATE_CREDENTIALS);
   }
   
   private void createNewCollection(final String collection) throws InterruptedException {
@@ -1077,6 +1088,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
             Create createCmd = new Create();
             createCmd.setCoreName(collection);
             createCmd.setDataDir(getDataDir(createTempDir(collection).toFile().getAbsolutePath()));
+            createCmd.setAuthCredentials(ALL_CREDENTIALS);
             client.request(createCmd);
           } catch (Exception e) {
             e.printStackTrace();
@@ -1135,7 +1147,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     if (r.nextBoolean())
       params.set("collection",DEFAULT_COLLECTION);
 
-    QueryResponse rsp = getCommonCloudSolrClient().query(params);
+    QueryResponse rsp = getCommonCloudSolrClient().query(params, SEARCH_CREDENTIALS);
     return rsp;
   }
   

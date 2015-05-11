@@ -18,9 +18,12 @@ package org.apache.solr.handler.admin;
  */
 
 import com.google.common.collect.ImmutableSet;
+
 import org.apache.commons.lang.StringUtils;
+import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.impl.BinaryResponseParser;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.RequestSyncShard;
@@ -55,11 +58,14 @@ import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.zookeeper.CreateMode;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -728,12 +734,21 @@ public class CollectionsHandler extends RequestHandlerBase {
         .getOverseerCollectionQueue()
         .offer(ZkStateReader.toJSON(m), timeout);
     if (event.getBytes() != null) {
-      SolrResponse response = SolrResponse.deserialize(event.getBytes());
-      rsp.getValues().addAll(response.getResponse());
-      SimpleOrderedMap exp = (SimpleOrderedMap) response.getResponse().get("exception");
-      if (exp != null) {
-        Integer code = (Integer) exp.get("rspCode");
-        rsp.setException(new SolrException(code != null && code != -1 ? ErrorCode.getErrorCode(code) : ErrorCode.SERVER_ERROR, (String)exp.get("msg")));
+      InputStream is = new ByteArrayInputStream(event.getBytes());
+      try {
+        NamedList<Object> response = getProcessedResponse(is);
+        // TODO merge into rsp - including set exception if it was a such - but this is not a http response, so
+        // status must be fetched form response (NamedList) and not from http-status to decide if it is an exception or not
+      } finally {
+        try { is.close(); } catch (IOException e) { /* Ignore - not going to happen */ }
+      }
+      Object response = SolrResponse.deserialize(event.getBytes());
+      if (response instanceof Exception) {
+        rsp.setException((Exception)response);
+      } else if (response instanceof Throwable) {
+        rsp.setException(new Exception((Throwable)response));
+      } else {
+        rsp.copyFromSolrResponse((SolrResponse)response);
       }
     } else {
       if (System.nanoTime() - time >= TimeUnit.NANOSECONDS.convert(timeout, TimeUnit.MILLISECONDS)) {
@@ -750,6 +765,11 @@ public class CollectionsHandler extends RequestHandlerBase {
             + " the collection unkown case");
       }
     }
+  }
+  
+  private NamedList<Object> getProcessedResponse(InputStream respBody) {
+    final ResponseParser processor = new BinaryResponseParser();
+    return processor.processResponse(respBody, null);
   }
   
   private void handleReloadAction(SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
@@ -780,6 +800,7 @@ public class CollectionsHandler extends RequestHandlerBase {
       reqSyncShard.setCollection(collection);
       reqSyncShard.setShard(shard);
       reqSyncShard.setCoreName(nodeProps.getCoreName());
+      reqSyncShard.setAuthCredentials(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req).getAuthCredentials());
       client.request(reqSyncShard);
     }
   }

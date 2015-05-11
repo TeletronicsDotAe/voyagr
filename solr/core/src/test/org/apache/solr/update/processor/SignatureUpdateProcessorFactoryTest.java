@@ -33,6 +33,7 @@ import org.apache.solr.handler.UpdateRequestHandler;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequestBase;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -78,6 +79,7 @@ public class SignatureUpdateProcessorFactoryTest extends SolrTestCaseJ4 {
       assertEquals(n, req.getSearcher().getIndexReader().numDocs());
     } finally {
       req.close();
+      SolrRequestInfo.clearRequestInfo();
     }
   }
   
@@ -334,12 +336,14 @@ public class SignatureUpdateProcessorFactoryTest extends SolrTestCaseJ4 {
     ArrayList<ContentStream> streams = new ArrayList<>(2);
     streams.add(new BinaryRequestWriter().getContentStream(ureq));
     LocalSolrQueryRequest req = new LocalSolrQueryRequest(h.getCore(), mmparams);
+    SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, new SolrQueryResponse()));
     try {
       req.setContentStreams(streams);
       UpdateRequestHandler h = new UpdateRequestHandler();
       h.init(new NamedList());
-      h.handleRequestBody(req, new SolrQueryResponse());
+      h.handleRequestBody(req, SolrRequestInfo.getRequestInfo().getRsp());
     } finally {
+      SolrRequestInfo.clearRequestInfo();
       req.close();
     }
     
@@ -372,13 +376,17 @@ public class SignatureUpdateProcessorFactoryTest extends SolrTestCaseJ4 {
     SolrQueryRequestBase req = new SolrQueryRequestBase(h.getCore(),
         (SolrParams) mmparams) {
     };
-
+    SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, new SolrQueryResponse()));
+    try {
     UpdateRequestHandler handler = new UpdateRequestHandler();
     handler.init(null);
     ArrayList<ContentStream> streams = new ArrayList<>(2);
     streams.add(new ContentStreamBase.StringStream(doc));
     req.setContentStreams(streams);
-    handler.handleRequestBody(req, new SolrQueryResponse());
+    handler.handleRequestBody(req, SolrRequestInfo.getRequestInfo().getRsp());
     req.close();
+    } finally {
+    	SolrRequestInfo.clearRequestInfo();
+    }
   }
 }

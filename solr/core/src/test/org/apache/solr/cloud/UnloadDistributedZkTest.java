@@ -41,6 +41,8 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 /**
  * This test simply does a bunch of basic things in solrcloud mode and asserts things
  * work as expected.
@@ -80,6 +82,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     String coreDataDir = createTempDir().toFile().getAbsolutePath();
     createCmd.setDataDir(getDataDir(coreDataDir));
     createCmd.setNumShards(2);
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     
     SolrClient client = clients.get(0);
     String url1 = getBaseUrl(client);
@@ -95,7 +98,8 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       createCmd.setCollection(collection);
       coreDataDir = createTempDir().toFile().getAbsolutePath();
       createCmd.setDataDir(getDataDir(coreDataDir));
-
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
+      
       adminClient.request(createCmd);
 
       // does not mean they are active and up yet :*
@@ -104,6 +108,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       // now unload one of the two
       Unload unloadCmd = new Unload(false);
       unloadCmd.setCoreName("test_unload_shard_and_collection_2");
+      unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(unloadCmd);
 
       // there should be only one shard
@@ -122,6 +127,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       // now unload one of the other
       unloadCmd = new Unload(false);
       unloadCmd.setCoreName("test_unload_shard_and_collection_1");
+      unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(unloadCmd);
     }
 
@@ -159,6 +165,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       createCmd.setCollection("unloadcollection");
       createCmd.setNumShards(1);
       createCmd.setDataDir(getDataDir(core1DataDir));
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(createCmd);
     }
     ZkStateReader zkStateReader = getCommonCloudSolrClient().getZkStateReader();
@@ -177,6 +184,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       createCmd.setCollection("unloadcollection");
       String core2dataDir = tmpDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection1" + "_2n";
       createCmd.setDataDir(getDataDir(core2dataDir));
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(createCmd);
     }
     zkStateReader.updateClusterState(true);
@@ -198,10 +206,10 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
             "humpty dumpy3 sat on a walls");
         SolrInputDocument doc3 = getDoc(id, 8, i1, -600, tlong, 600, t1,
             "humpty dumpy2 sat on a walled");
-        collectionClient.add(doc1);
-        collectionClient.add(doc2);
-        collectionClient.add(doc3);
-        collectionClient.commit();
+        collectionClient.add(doc1, -1, UPDATE_CREDENTIALS);
+        collectionClient.add(doc2, -1, UPDATE_CREDENTIALS);
+        collectionClient.add(doc3, -1, UPDATE_CREDENTIALS);
+        collectionClient.commit(UPDATE_CREDENTIALS);
       }
     }
 
@@ -214,6 +222,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       createCmd.setCollection("unloadcollection");
       String core3dataDir = tmpDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection" + "_3n";
       createCmd.setDataDir(getDataDir(core3dataDir));
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(createCmd);
     }
     
@@ -229,11 +238,11 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       for (int x = 20; x < 100; x++) {
         SolrInputDocument doc1 = getDoc(id, x, i1, -600, tlong, 600, t1,
             "humpty dumpy sat on a wall");
-        addClient.add(doc1);
+        addClient.add(doc1, -1, UPDATE_CREDENTIALS);
       }
     }
     // don't commit so they remain in the tran log
-    //collectionClient.commit();
+    //collectionClient.commit(UPDATE_CREDENTIALS);
     
     // unload the leader
     try (HttpSolrClient collectionClient = new HttpSolrClient(leaderProps.getBaseUrl())) {
@@ -242,6 +251,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
 
       Unload unloadCmd = new Unload(false);
       unloadCmd.setCoreName(leaderProps.getCoreName());
+      unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
       ModifiableSolrParams p = (ModifiableSolrParams) unloadCmd.getParams();
 
       collectionClient.request(unloadCmd);
@@ -268,7 +278,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       for (int x = 101; x < 200; x++) {
         SolrInputDocument doc1 = getDoc(id, x, i1, -600, tlong, 600, t1,
             "humpty dumpy sat on a wall");
-        addClient.add(doc1);
+        addClient.add(doc1, -1, UPDATE_CREDENTIALS);
       }
     }
     
@@ -284,6 +294,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       createCmd.setCollection("unloadcollection");
       String core4dataDir = tmpDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection" + "_4n";
       createCmd.setDataDir(getDataDir(core4dataDir));
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(createCmd);
     }
     waitForRecoveriesToFinish("unloadcollection", zkStateReader, false);
@@ -296,6 +307,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
 
       Unload unloadCmd = new Unload(false);
       unloadCmd.setCoreName(leaderProps.getCoreName());
+      unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
       SolrParams p = (ModifiableSolrParams) unloadCmd.getParams();
       collectionClient.request(unloadCmd);
     }
@@ -322,6 +334,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
       createCmd.setCoreName(leaderProps.getCoreName());
       createCmd.setCollection("unloadcollection");
       createCmd.setDataDir(getDataDir(core1DataDir));
+      createCmd.setAuthCredentials(ALL_CREDENTIALS);
       adminClient.request(createCmd);
     }
     waitForRecoveriesToFinish("unloadcollection", zkStateReader, false);
@@ -331,7 +344,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     try (HttpSolrClient adminClient = new HttpSolrClient(url2 + "/unloadcollection")) {
       adminClient.setConnectionTimeout(15000);
       adminClient.setSoTimeout(30000);
-      adminClient.commit();
+      adminClient.commit(UPDATE_CREDENTIALS);
       SolrQuery q = new SolrQuery("*:*");
       q.set("distrib", false);
       found1 = adminClient.query(q).getResults().getNumFound();
@@ -339,7 +352,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     try (HttpSolrClient adminClient = new HttpSolrClient(url3 + "/unloadcollection")) {
       adminClient.setConnectionTimeout(15000);
       adminClient.setSoTimeout(30000);
-      adminClient.commit();
+      adminClient.commit(UPDATE_CREDENTIALS);
       SolrQuery q = new SolrQuery("*:*");
       q.set("distrib", false);
       found3 = adminClient.query(q).getResults().getNumFound();
@@ -348,7 +361,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     try (HttpSolrClient adminClient = new HttpSolrClient(url4 + "/unloadcollection")) {
       adminClient.setConnectionTimeout(15000);
       adminClient.setSoTimeout(30000);
-      adminClient.commit();
+      adminClient.commit(UPDATE_CREDENTIALS);
       SolrQuery q = new SolrQuery("*:*");
       q.set("distrib", false);
       long found4 = adminClient.query(q).getResults().getNumFound();
@@ -386,6 +399,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
           public void run() {
             Unload unloadCmd = new Unload(true);
             unloadCmd.setCoreName("multiunload" + freezeJ);
+            unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
             try {
               adminClient.request(unloadCmd);
             } catch (SolrServerException | IOException e) {

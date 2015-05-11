@@ -105,11 +105,11 @@ public class TestAnalyticsQParserPlugin extends QParserPlugin {
     public void  handleMergeFields(ResponseBuilder rb, SolrIndexSearcher searcher) {
     }
 
-    public void merge(ResponseBuilder rb, ShardRequest shardRequest) {
+    public void merge(ResponseBuilder rb) {
       int count = 0;
       NamedList merged = new NamedList();
 
-      for(ShardResponse shardResponse : shardRequest.responses) {
+      for(ShardResponse shardResponse : rb.stageResponses) {
         NamedList response = shardResponse.getSolrResponse().getResponse();
         NamedList analytics = (NamedList)response.get("analytics");
         Integer c = (Integer)analytics.get("mycount");

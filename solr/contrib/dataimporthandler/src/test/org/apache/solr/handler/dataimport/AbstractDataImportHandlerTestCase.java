@@ -80,16 +80,16 @@ public abstract class AbstractDataImportHandlerTestCase extends
   }
 
   protected void runFullImport(String dataConfig) throws Exception {
-    LocalSolrQueryRequest request = lrf.makeRequest("command", "full-import",
+    SolrQueryRequest request = lrf.makeRequestInfo("command", "full-import",
             "debug", "on", "clean", "true", "commit", "true", "dataConfig",
-            dataConfig);
+            dataConfig).getReq();
     h.query("/dataimport", request);
   }
 
   protected void runDeltaImport(String dataConfig) throws Exception {
-    LocalSolrQueryRequest request = lrf.makeRequest("command", "delta-import",
+    SolrQueryRequest request = lrf.makeRequestInfo("command", "delta-import",
             "debug", "on", "clean", "false", "commit", "true", "dataConfig",
-            dataConfig);
+            dataConfig).getReq();
     h.query("/dataimport", request);
   }
 
@@ -317,7 +317,7 @@ public abstract class AbstractDataImportHandlerTestCase extends
     @Override
     public UpdateRequestProcessor getInstance(SolrQueryRequest req,
         SolrQueryResponse rsp, UpdateRequestProcessor next) {
-      return new TestUpdateRequestProcessor(next);
+      return new TestUpdateRequestProcessor(next, req, rsp);
     }
     
   }
@@ -340,8 +340,8 @@ public abstract class AbstractDataImportHandlerTestCase extends
       rollbackCalled = false;
     }
     
-    public TestUpdateRequestProcessor(UpdateRequestProcessor next) {
-      super(next);
+    public TestUpdateRequestProcessor(UpdateRequestProcessor next, SolrQueryRequest req, SolrQueryResponse rsp) {
+      super(next, req, rsp);
       reset();
     }
 

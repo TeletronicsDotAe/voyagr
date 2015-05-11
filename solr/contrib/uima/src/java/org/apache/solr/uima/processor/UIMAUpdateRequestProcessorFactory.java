@@ -67,7 +67,7 @@ public class UIMAUpdateRequestProcessorFactory extends
     }
     
     return new UIMAUpdateRequestProcessor(next, req.getCore().getName(),
-        configuration, ae, pool);
+        configuration, ae, pool, req, rsp);
   }
   
 }

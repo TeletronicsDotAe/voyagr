@@ -106,7 +106,7 @@ public class MergeStrategyTest extends BaseDistributedSearchTestCase {
 
     MergeStrategy m1 = new MergeStrategy() {
       @Override
-      public void  merge(ResponseBuilder rb, ShardRequest sreq) {
+      public void  merge(ResponseBuilder rb) {
       }
 
       public boolean mergesIds() {
@@ -124,7 +124,7 @@ public class MergeStrategyTest extends BaseDistributedSearchTestCase {
 
     MergeStrategy m2 = new MergeStrategy() {
       @Override
-      public void merge(ResponseBuilder rb, ShardRequest sreq) {
+      public void merge(ResponseBuilder rb) {
       }
 
       public boolean mergesIds() {
@@ -142,7 +142,7 @@ public class MergeStrategyTest extends BaseDistributedSearchTestCase {
 
     MergeStrategy m3 = new MergeStrategy() {
       @Override
-      public void merge(ResponseBuilder rb, ShardRequest sreq) {
+      public void merge(ResponseBuilder rb) {
       }
 
       public boolean mergesIds() {

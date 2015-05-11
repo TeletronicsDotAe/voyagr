@@ -32,7 +32,7 @@ public abstract class SimpleUpdateProcessorFactory extends UpdateRequestProcesso
 
   @Override
   public UpdateRequestProcessor getInstance(final SolrQueryRequest req, final SolrQueryResponse rsp, UpdateRequestProcessor next) {
-    return new UpdateRequestProcessor(next) {
+    return new UpdateRequestProcessor(next, req, rsp) {
       @Override
       public void processAdd(AddUpdateCommand cmd) throws IOException {
         process(cmd, req, rsp);

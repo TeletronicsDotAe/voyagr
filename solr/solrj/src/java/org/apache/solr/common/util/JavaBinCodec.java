@@ -111,7 +111,7 @@ public class JavaBinCodec {
     version = dis.readByte();
     if (version != VERSION) {
       throw new RuntimeException("Invalid version (expected " + VERSION +
-          ", but " + version + ") or the data in not in 'javabin' format");
+          ", but " + version + ") or the data is not in 'javabin' format");
     }
     return readVal(dis);
   }
@@ -390,7 +390,8 @@ public class JavaBinCodec {
   public SolrInputDocument readSolrInputDocument(DataInputInputStream dis) throws IOException {
     int sz = readVInt(dis);
     float docBoost = (Float)readVal(dis);
-    SolrInputDocument sdoc = new SolrInputDocument();
+    String uniquePartRef = (String)readVal(dis);
+    SolrInputDocument sdoc = new SolrInputDocument(uniquePartRef);
     sdoc.setDocumentBoost(docBoost);
     for (int i = 0; i < sz; i++) {
       float boost = 1.0f;
@@ -416,6 +417,7 @@ public class JavaBinCodec {
     int sz = sdoc.size() + (children==null ? 0 : children.size());
     writeTag(SOLRINPUTDOC, sz);
     writeFloat(sdoc.getDocumentBoost());
+    writeStr(sdoc.getUniquePartRef());
     for (SolrInputField inputField : sdoc.values()) {
       if (inputField.getBoost() != 1.0f) {
         writeFloat(inputField.getBoost());

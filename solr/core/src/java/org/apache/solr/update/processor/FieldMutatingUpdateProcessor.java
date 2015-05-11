@@ -31,6 +31,8 @@ import org.apache.solr.common.SolrInputField;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.core.SolrResourceLoader;
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.update.AddUpdateCommand;
@@ -57,8 +59,8 @@ public abstract class FieldMutatingUpdateProcessor
 
   private final FieldNameSelector selector;
   public FieldMutatingUpdateProcessor(FieldNameSelector selector,
-                                      UpdateRequestProcessor next) {
-    super(next);
+                                      UpdateRequestProcessor next, SolrQueryRequest req, SolrQueryResponse rsp) {
+    super(next, req, rsp);
     this.selector = selector;
   }
   

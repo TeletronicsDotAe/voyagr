@@ -25,6 +25,9 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import org.apache.solr.common.exceptions.PartialErrors;
+import org.apache.solr.common.util.NamedList;
+import org.apache.solr.security.AuthCredentials;
 
 /**
  * 
@@ -32,7 +35,6 @@ import java.util.concurrent.TimeUnit;
  * @since solr 1.3
  */
 public abstract class SolrRequest<T extends SolrResponse> implements Serializable {
-
   public enum METHOD {
     GET,
     POST,
@@ -45,6 +47,8 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
   private ResponseParser responseParser;
   private StreamingResponseCallback callback;
   private Set<String> queryParams;
+  private AuthCredentials authCredentials;
+  private boolean preemptiveAuthentication = true;
   
   //---------------------------------------------------------
   //---------------------------------------------------------
@@ -96,6 +100,22 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
   public void setStreamingResponseCallback(StreamingResponseCallback callback) {
     this.callback = callback;
   }
+  
+  public AuthCredentials getAuthCredentials() {
+    return authCredentials;
+  }
+
+  public void setAuthCredentials(AuthCredentials authCredentials) {
+    this.authCredentials = authCredentials;
+  }
+
+  public boolean getPreemptiveAuthentication() {
+    return preemptiveAuthentication;
+  }
+
+  public void setPreemptiveAuthentication(boolean preemptiveAuthentication) {
+    this.preemptiveAuthentication = preemptiveAuthentication;
+  }
 
   /**
    * Parameter keys that are sent via the query string
@@ -130,11 +150,25 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
    * @throws IOException if there is a communication error
    */
   public final T process(SolrClient client, String collection) throws SolrServerException, IOException {
+    PartialErrors peToBeThrown = null;
     long startTime = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+    NamedList<Object> genericResponse;
     T res = createResponse(client);
-    res.setResponse(client.request(this, collection));
+    try {
+      genericResponse = client.request(this, collection);
+    } catch (PartialErrors pe) {
+      genericResponse = pe.getPayload();
+      peToBeThrown = pe;
+    }
+    res.setResponse(genericResponse);
     long endTime = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
     res.setElapsedTime(endTime - startTime);
+    
+    if (peToBeThrown != null) {
+      peToBeThrown.setSpecializedResponse(res);
+      throw peToBeThrown;
+    }
+
     return res;
   }
 

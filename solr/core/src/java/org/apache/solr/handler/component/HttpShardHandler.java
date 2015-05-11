@@ -45,6 +45,7 @@ import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 
 import java.net.ConnectException;
 import java.util.Arrays;
@@ -68,11 +69,13 @@ public class HttpShardHandler extends ShardHandler {
   private Set<Future<ShardResponse>> pending;
   private Map<String,List<String>> shardToURLs;
   private HttpClient httpClient;
+  private AuthCredentialsSource authCredentialsSource;
 
   protected static Logger log = LoggerFactory.getLogger(HttpShardHandler.class);
 
-  public HttpShardHandler(HttpShardHandlerFactory httpShardHandlerFactory, HttpClient httpClient) {
+  public HttpShardHandler(HttpShardHandlerFactory httpShardHandlerFactory, HttpClient httpClient, AuthCredentialsSource authCredentialsSource) {
     this.httpClient = httpClient;
+    this.authCredentialsSource = authCredentialsSource;
     this.httpShardHandlerFactory = httpShardHandlerFactory;
     completionService = httpShardHandlerFactory.newCompletionService();
     pending = new HashSet<>();
@@ -112,15 +115,19 @@ public class HttpShardHandler extends ShardHandler {
     }
   }
 
-
-  // Not thread safe... don't use in Callable.
   // Don't modify the returned URL list.
   private List<String> getURLs(ShardRequest sreq, String shard) {
     List<String> urls = shardToURLs.get(shard);
     if (urls == null) {
-      urls = httpShardHandlerFactory.makeURLList(shard);
-      preferCurrentHostForDistributedReq(sreq, urls);
-      shardToURLs.put(shard, urls);
+      // Multiple threads might want to modify shardToURLs concurrently. Make it thread-safe
+      synchronized (shardToURLs) {
+        urls = shardToURLs.get(shard);
+        if (urls==null) {
+          urls = httpShardHandlerFactory.makeURLList(shard);
+          preferCurrentHostForDistributedReq(sreq, urls);
+          shardToURLs.put(shard, urls);
+        }
+      }
     }
     return urls;
   }
@@ -203,6 +210,9 @@ public class HttpShardHandler extends ShardHandler {
           // use generic request to avoid extra processing of queries
           QueryRequest req = new QueryRequest(params);
           req.setMethod(SolrRequest.METHOD.POST);
+          if (authCredentialsSource != null) {
+            req.setAuthCredentials(authCredentialsSource.getAuthCredentials());
+          }
 
           // no need to set the response parser as binary is the default
           // req.setResponseParser(new BinaryResponseParser());
@@ -221,7 +231,7 @@ public class HttpShardHandler extends ShardHandler {
               ssr.nl = client.request(req);
             }
           } else {
-            LBHttpSolrClient.Rsp rsp = httpShardHandlerFactory.makeLoadBalancedRequest(req, urls);
+            LBHttpSolrClient.Rsp rsp = httpShardHandlerFactory.makeLoadBalancedRequest(req, urls, httpClient);
             ssr.nl = rsp.getResponse();
             srsp.setShardAddress(rsp.getServer());
           }
@@ -268,7 +278,7 @@ public class HttpShardHandler extends ShardHandler {
     while (pending.size() > 0) {
       try {
         Future<ShardResponse> future = completionService.take();
-        pending.remove(future);
+        if (pending.remove(future)) {
         ShardResponse rsp = future.get();
         if (bailOnError && rsp.getException() != null) return rsp; // if exception, return immediately
         // add response to the response list... we do this after the take() and
@@ -278,6 +288,9 @@ public class HttpShardHandler extends ShardHandler {
         rsp.getShardRequest().responses.add(rsp);
         if (rsp.getShardRequest().responses.size() == rsp.getShardRequest().actualShards.length) {
           return rsp;
+        }
+        } else {
+          // the future just taken from the completionService was canceled = not in pending
         }
       } catch (InterruptedException e) {
         throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, e);
@@ -298,6 +311,8 @@ public class HttpShardHandler extends ShardHandler {
       // there are finally blocks to release connections.
       future.cancel(true);
     }
+    pending.clear();
+    // Ought to also remove the task/future from the completionService, so that we will never take it, but it does not seem possible
   }
 
   @Override
@@ -470,6 +485,8 @@ public class HttpShardHandler extends ShardHandler {
     return httpShardHandlerFactory;
   }
 
-
+  public HttpClient getHttpClient() {
+    return httpClient;
+  }
 
 }

@@ -23,6 +23,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.impl.HttpSolrClient.HttpUriRequestResponse;
+import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.WaitForState;
 import org.apache.solr.client.solrj.request.UpdateRequest;
@@ -47,6 +48,7 @@ import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.CommitUpdateCommand;
 import org.apache.solr.update.PeerSync;
 import org.apache.solr.update.UpdateLog;
@@ -150,7 +152,7 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
     
     if (replicationHandler == null) {
       throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE,
-          "Skipping recovery, no " + REPLICATION_HANDLER + " handler found");
+            "Skipping recovery, no " + REPLICATION_HANDLER + " handler found. core=" + coreName);
     }
     
     ModifiableSolrParams solrParams = new ModifiableSolrParams();
@@ -160,7 +162,7 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
     boolean success = replicationHandler.doFetch(solrParams, false);
     
     if (!success) {
-      throw new SolrException(ErrorCode.SERVER_ERROR, "Replication for recovery failed.");
+      throw new SolrException(ErrorCode.SERVER_ERROR, "Replication for recovery failed. core=" + coreName);
     }
     
     // solrcloud_debug
@@ -199,6 +201,7 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
     try (HttpSolrClient client = new HttpSolrClient(leaderUrl)) {
       client.setConnectionTimeout(30000);
       UpdateRequest ureq = new UpdateRequest();
+      HttpClientUtil.setAuthCredentials(client.getHttpClient(), AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
       ureq.setParams(new ModifiableSolrParams());
       ureq.getParams().set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
       ureq.getParams().set(UpdateParams.OPEN_SEARCHER, false);
@@ -228,10 +231,10 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
         doRecovery(core);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        SolrException.log(log, "", e);
+        SolrException.log(log, "core=" + coreName, e);
         throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR, "", e);
       } catch (Exception e) {
-        log.error("", e);
+        log.error("core=" + coreName, e);
         throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR, "", e);
       }
     } finally {
@@ -283,12 +286,12 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
         }
         
         if (oldIdx > 0) {
-          log.info("####### Found new versions added after startup: num="
+          log.info("####### Found new versions added after startup: core=" + coreName + " num="
               + oldIdx);
-          log.info("###### currentVersions=" + recentVersions);
+          log.info("###### core=" + coreName + " currentVersions=" + recentVersions);
         }
         
-        log.info("###### startupVersions=" + startingVersions);
+        log.info("###### core=" + coreName + " startupVersions=" + startingVersions);
       } catch (Exception e) {
         SolrException.log(log, "Error getting recent versions. core=" + coreName, e);
         recentVersions = new ArrayList<>(0);
@@ -384,6 +387,7 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           // + " i am:" + zkController.getNodeName());
           PeerSync peerSync = new PeerSync(core,
               Collections.singletonList(leaderUrl), ulog.getNumRecordsToKeep(), false, false);
+          try {
           peerSync.setStartingVersions(recentVersions);
           boolean syncSuccess = peerSync.sync();
           if (syncSuccess) {
@@ -421,6 +425,9 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           }
 
           log.info("PeerSync Recovery was not successful - trying replication. core=" + coreName);
+          } finally {
+            peerSync.close();
+          }
         }
 
         if (isClosed()) {
@@ -459,16 +466,16 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           recoveryListener.recovered();
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-          log.warn("Recovery was interrupted", e);
+          log.warn("Recovery was interrupted. core=" + coreName, e);
           close = true;
         } catch (Exception e) {
-          SolrException.log(log, "Error while trying to recover", e);
+          SolrException.log(log, "Error while trying to recover. core=" + coreName, e);
         } finally {
           if (!replayed) {
             try {
               ulog.dropBufferedUpdates();
             } catch (Exception e) {
-              SolrException.log(log, "", e);
+              SolrException.log(log, "core=" + coreName, e);
             }
           }
 
@@ -572,6 +579,7 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
       throws SolrServerException, IOException, InterruptedException, ExecutionException {
 
     try (HttpSolrClient client = new HttpSolrClient(leaderBaseUrl)) {
+      HttpClientUtil.setAuthCredentials(client.getHttpClient(), AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
       client.setConnectionTimeout(30000);
       WaitForState prepCmd = new WaitForState();
       prepCmd.setCoreName(leaderCoreName);

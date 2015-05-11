@@ -19,6 +19,9 @@ package org.apache.solr.core;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+
+import org.apache.lucene.uninverting.FieldCache;
+import org.apache.lucene.uninverting.FieldCacheContainer;
 import org.apache.solr.cloud.ZkController;
 import org.apache.solr.cloud.ZkSolrResourceLoader;
 import org.apache.solr.common.SolrException;
@@ -32,6 +35,7 @@ import org.apache.solr.handler.component.ShardHandlerFactory;
 import org.apache.solr.logging.LogWatcher;
 import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.update.UpdateShardHandler;
+import org.apache.solr.update.RecentlyLookedUpOrUpdatedDocumentsHandler;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.solr.util.FileUtils;
 import org.apache.zookeeper.KeeperException;
@@ -233,7 +237,12 @@ public class CoreContainer {
     }
 
 
+    PluginInfo recentlyLookedUpOrUpdatedDocumentsCachePluginInfo = cfg.getRecentlyLookedUpOrUpdatedDocumentsCachePluginInfo();
+    RecentlyLookedUpOrUpdatedDocumentsHandler.setRecentlyLookedUpOrUpdatedDocuments(recentlyLookedUpOrUpdatedDocumentsCachePluginInfo, loader);
+
     shardHandlerFactory = ShardHandlerFactory.newInstance(cfg.getShardHandlerFactoryPluginInfo(), loader);
+    FieldCache fieldCache = cfg.getFieldCache();
+    if (fieldCache != null) setFieldCache(fieldCache);
 
     updateShardHandler = new UpdateShardHandler(cfg.getUpdateShardHandlerConfig());
 
@@ -349,6 +358,8 @@ public class CoreContainer {
       zkSys.publishCoresAsDown(solrCores.getCores());
     }
 
+    //hostName = cfg.getHost();
+    //log.info("Host Name: " + hostName);
     try {
       if (coreAdminHandler != null) coreAdminHandler.shutdown();
     } catch (Exception e) {
@@ -422,6 +433,10 @@ public class CoreContainer {
     } finally {
       super.finalize();
     }
+  }
+
+  protected void setFieldCache(final FieldCache fc) {
+    FieldCacheContainer.getTheFieldCacheContainer().setFieldCache(fc);
   }
 
   public CoresLocator getCoresLocator() {
