@@ -40,6 +40,8 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 /**
  * Verifies cluster state remains consistent after collection reload.
  */
@@ -125,6 +127,7 @@ public class CollectionReloadTest extends AbstractFullDistribZkTestBase {
     try {
       CollectionAdminRequest.Delete req = new CollectionAdminRequest.Delete();
       req.setCollectionName(testCollectionName);
+      req.setAuthCredentials(ALL_CREDENTIALS);
       req.process(cloudClient);
     } catch (Exception e) {
       // don't fail the test
@@ -139,7 +142,7 @@ public class CollectionReloadTest extends AbstractFullDistribZkTestBase {
     String coreName = coreProps.getCoreName();
     boolean reloadedOk = false;
     try (HttpSolrClient client = new HttpSolrClient(coreProps.getBaseUrl())) {
-      CoreAdminResponse statusResp = CoreAdminRequest.getStatus(coreName, client);
+      CoreAdminResponse statusResp = CoreAdminRequest.getStatus(coreName, client, ALL_CREDENTIALS);
       long leaderCoreStartTime = statusResp.getStartTime(coreName).getTime();
 
       Thread.sleep(1000);
@@ -151,13 +154,14 @@ public class CollectionReloadTest extends AbstractFullDistribZkTestBase {
       params.set("name", testCollectionName);
       QueryRequest request = new QueryRequest(params);
       request.setPath("/admin/collections");
+      request.setAuthCredentials(ALL_CREDENTIALS);
       client.request(request);
       Thread.sleep(2000); // reload can take a short while
 
       // verify reload is done, waiting up to 30 seconds for slow test environments
       long timeout = System.nanoTime() + TimeUnit.NANOSECONDS.convert(30, TimeUnit.SECONDS);
       while (System.nanoTime() < timeout) {
-        statusResp = CoreAdminRequest.getStatus(coreName, client);
+        statusResp = CoreAdminRequest.getStatus(coreName, client, ALL_CREDENTIALS);
         long startTimeAfterReload = statusResp.getStartTime(coreName).getTime();
         if (startTimeAfterReload > leaderCoreStartTime) {
           reloadedOk = true;
@@ -176,6 +180,7 @@ public class CollectionReloadTest extends AbstractFullDistribZkTestBase {
     if (resp.getResponse().get("failure") != null) {
       CollectionAdminRequest.Delete req = new CollectionAdminRequest.Delete();
       req.setCollectionName(testCollectionName);
+      req.setAuthCredentials(ALL_CREDENTIALS);
       req.process(cloudClient);
       resp = createCollection(testCollectionName, numShards, replicationFactor, maxShardsPerNode);
       if (resp.getResponse().get("failure") != null)

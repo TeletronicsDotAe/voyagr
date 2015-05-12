@@ -1627,7 +1627,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
       params.set(DocCollection.STATE_FORMAT, "1");
     }
     SolrRequest request = new QueryRequest(params);
-    request.setAuthCredentials(SEARCH_CREDENTIALS);
+    request.setAuthCredentials(ALL_CREDENTIALS);
     request.setPath("/admin/collections");
 
     CollectionAdminResponse res = new CollectionAdminResponse();

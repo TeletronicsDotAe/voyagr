@@ -507,9 +507,13 @@ public class HttpSolrClient extends SolrClient {
       }
       if (processor == null || processor instanceof InputStreamResponseParser) {
         
+        // no processor specified, return raw stream
+        NamedList<Object> rsp = new NamedList<>();
+        rsp.add("stream", respBody);
         // Only case where stream should not be closed
         shouldClose = false;
         success = true;
+        return rsp;
       }
       
       String procCt = processor.getContentType();
@@ -535,24 +539,17 @@ public class HttpSolrClient extends SolrClient {
         }
       }
       
-      NamedList<Object> rsp = null;
       String charset = EntityUtils.getContentCharSet(response.getEntity());
-      try {
-        rsp = processor.processResponse(respBody, charset);
-      } catch (Exception e) {
-        if (e instanceof SolrException) throw (SolrException)e;
-        throw new SolrExceptionCausedByException(ErrorCode.getErrorCode(httpStatus), e.getMessage(), e);
-      }
       if (httpStatus != HttpStatus.SC_OK) {
         StringBuilder additionalMsg = new StringBuilder();
         additionalMsg.append( "\n\n" );
         additionalMsg.append( "request: "+method.getURI() );
-        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, respBody, charset):null;
+        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, respBody, charset, httpStatus):null;
         SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
         throw ex;
       }
       success = true;
-      return getProcessedResponse(processor, respBody, charset);
+      return getProcessedResponse(processor, respBody, charset, httpStatus);
     } catch (ConnectException e) {
       throw new SolrServerException("Server refused connection at: "
           + getBaseURL(), e);
@@ -621,14 +618,12 @@ public class HttpSolrClient extends SolrClient {
     return nonPreemptive && (contextCredentials || httpClientCredentials);
   }
   
-  private NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset) {
-    if (processor == null) {
-      // no processor specified, return raw stream
-      NamedList<Object> rsp = new NamedList<Object>();
-      rsp.add("stream", respBody);
-      return rsp;
-    } else {
+  private NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset, int httpStatus) {
+    try {
       return processor.processResponse(respBody, charset);
+    } catch (Exception e) {
+      if (e instanceof SolrException) throw (SolrException)e;
+      throw new SolrExceptionCausedByException(ErrorCode.getErrorCode(httpStatus), e.getMessage(), e);
     }
   }
   
