@@ -1367,4 +1367,20 @@ public abstract class SolrClient implements Serializable, Closeable {
   public void close() throws IOException {
     shutdown();
   }
+  
+  protected void throwSolrServerOrIOOrRuntimeException(Exception e) throws SolrServerException, IOException {
+    if (e instanceof SolrServerException) throw (SolrServerException)e;
+    if (e instanceof IOException) throw (IOException)e;
+    // including SolrException
+    if (e instanceof RuntimeException) throw (RuntimeException)e;
+    throw new SolrServerException(e);
+  }
+  
+  protected void throwSolrServerOrRuntimeException(Exception e) throws SolrServerException {
+    if (e instanceof SolrServerException) throw (SolrServerException)e;
+    // including SolrException
+    if (e instanceof RuntimeException) throw (RuntimeException)e;
+    throw new SolrServerException(e);
+  }
+
 }

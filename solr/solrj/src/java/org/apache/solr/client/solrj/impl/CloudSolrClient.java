@@ -623,7 +623,7 @@ public class CloudSolrClient extends SolrClient {
           NamedList<Object> rsp = lbClient.request(lbRequest).getResponse();
           shardResponses.add(url, rsp);
         } catch (Exception e) {
-          throw new SolrServerException(e);
+          throwSolrServerOrRuntimeException(e);
         }
       }
     }
@@ -855,16 +855,7 @@ public class CloudSolrClient extends SolrClient {
       Throwable rootCause = SolrException.getRootCause(exc);
       // don't do retry support for admin requests or if the request doesn't have a collection specified
       if (collection == null || request.getPath().startsWith("/admin")) {
-        if (exc instanceof SolrServerException) {
-          throw (SolrServerException)exc;
-        } else if (exc instanceof IOException) {
-          throw (IOException)exc;
-        }else if (exc instanceof RuntimeException) {
-          throw (RuntimeException) exc;
-        }
-        else {
-          throw new SolrServerException(rootCause);
-        }
+        throwSolrServerOrIOOrRuntimeException(exc);
       }
 
       int errorCode = (rootCause instanceof SolrException) ?
@@ -922,13 +913,7 @@ public class CloudSolrClient extends SolrClient {
         log.warn("Re-trying request to  collection(s) "+collection+" after stale state error from server.");
         resp = requestWithRetryOnStaleState(request, retryCount+1, collection);
       } else {
-        if (exc instanceof SolrServerException) {
-          throw (SolrServerException)exc;
-        } else if (exc instanceof IOException) {
-          throw (IOException)exc;
-        } else {
-          throw new SolrServerException(rootCause);
-        }
+        throwSolrServerOrIOOrRuntimeException(exc);
       }
     }
 
