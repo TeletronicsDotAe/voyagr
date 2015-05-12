@@ -421,7 +421,7 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
     QueueEvent qe = new QueueEvent("id", ZkStateReader.toJSON(props), null){
       @Override
       public void setBytes(byte[] bytes) {
-        lastProcessMessageResult = null; // TODO SolrResponse.deserialize( bytes);
+        lastProcessMessageResult = SolrResponse.deserialize( bytes);
       }
     };
     queue.add(qe);

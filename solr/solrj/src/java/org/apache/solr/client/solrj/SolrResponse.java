@@ -144,7 +144,7 @@ public abstract class SolrResponse implements Serializable {
   	return getPartialErrors(localPartialErrosMap, parentNamedList).size();
   }
 	
-  public static byte[] serializable(Object response) {
+  public static byte[] serializable(SolrResponse response) {
     try {
       ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
       ObjectOutputStream outputStream = new ObjectOutputStream(byteStream);
@@ -155,11 +155,11 @@ public abstract class SolrResponse implements Serializable {
     }
   }
   
-  public static Object deserialize(byte[] bytes) {
+  public static SolrResponse deserialize(byte[] bytes) {
     try {
       ByteArrayInputStream byteStream = new ByteArrayInputStream(bytes);
       ObjectInputStream inputStream = new ObjectInputStream(byteStream);
-      return inputStream.readObject();
+      return (SolrResponse) inputStream.readObject();
     } catch (Exception e) {
       throw new SolrException(ErrorCode.SERVER_ERROR, e);
     }
