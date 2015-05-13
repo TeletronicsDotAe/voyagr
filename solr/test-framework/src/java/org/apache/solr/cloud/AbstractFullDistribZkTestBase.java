@@ -1673,7 +1673,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
       // setup the server...
       String baseUrl = buildUrl(port);
       String url = baseUrl + (baseUrl.endsWith("/") ? "" : "/") + DEFAULT_COLLECTION;
-      HttpSolrClient client = new HttpSolrClient(url);
+      HttpSolrClient client = createNewSolrClientBase(url);
       client.setConnectionTimeout(DEFAULT_CONNECTION_TIMEOUT);
       client.setSoTimeout(60000);
       client.setDefaultMaxConnectionsPerHost(100);

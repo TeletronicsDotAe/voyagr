@@ -17,21 +17,22 @@ package org.apache.solr;
  * limitations under the License.
  */
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_PASSWORD;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_USERNAME;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
-
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 import junit.framework.Assert;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.TestUtil;
 import org.apache.solr.client.solrj.SolrClient;
+import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettyConfig;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
+import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
+import org.apache.solr.client.solrj.request.DirectXmlRequest;
+import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.response.UpdateResponse;
@@ -55,6 +56,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.servlet.Filter;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.ElementType;
@@ -453,7 +455,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   protected SolrClient createNewSolrClient(int port) {
     try {
       // setup the client...
-      HttpSolrClient client = new HttpSolrClient(buildUrl(port) + "/" + DEFAULT_TEST_CORENAME);
+      HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/" + DEFAULT_TEST_CORENAME);
       client.setConnectionTimeout(clientConnectionTimeout);
       client.setSoTimeout(clientSoTimeout);
       client.setDefaultMaxConnectionsPerHost(100);
@@ -463,6 +465,23 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     catch (Exception ex) {
       throw new RuntimeException(ex);
     }
+  }
+  
+  protected final HttpSolrClient createNewSolrClientBase(String url) {
+    return new HttpSolrClient(url) {
+      
+      protected AuthCredentials getAuthCredentials(SolrRequest request) {
+        AuthCredentials result = super.getAuthCredentials(request);
+        if (result != null) return result;
+        // TODO test if we are running with common-security, and only then do the credentials below
+        // TODO better implementation needed - does not handle added SolrRequest-types
+        if (request instanceof AbstractUpdateRequest) return UPDATE_CREDENTIALS;
+        if (request instanceof DirectXmlRequest) return UPDATE_CREDENTIALS;
+        if (request instanceof QueryRequest) return SEARCH_CREDENTIALS;
+        return ALL_CREDENTIALS;
+      }
+      
+    };
   }
   
   protected String buildUrl(int port) {

@@ -575,8 +575,12 @@ public class HttpSolrClient extends SolrClient {
     }
   }
   
+  protected AuthCredentials getAuthCredentials(SolrRequest request) {
+    return request.getAuthCredentials();
+  }
+  
   public HttpContext getHttpContextForRequest(SolrRequest request) {
-    return getHttpContext(request.getAuthCredentials(), request.getPreemptiveAuthentication(), getBaseURL());
+    return getHttpContext(getAuthCredentials(request), request.getPreemptiveAuthentication(), getBaseURL());
   }
   
   public static HttpContext getHttpContext(AuthCredentials authCredentials, boolean preemptiveAuthentication, String baseURL) {
