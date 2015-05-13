@@ -645,6 +645,10 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   /**
    * Returns the QueryResponse from {@link #queryServer}  
    */
+  protected QueryResponse query(boolean setDistribParams, SolrParams p) throws Exception {
+    return query(setDistribParams, p, null);
+  }
+  
   protected QueryResponse query(boolean setDistribParams, SolrParams p, final AuthCredentials authCredentials) throws Exception {
     
     final ModifiableSolrParams params = new ModifiableSolrParams(p);
