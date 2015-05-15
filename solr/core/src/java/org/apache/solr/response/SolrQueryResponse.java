@@ -181,18 +181,7 @@ public class SolrQueryResponse {
    */
   public Exception getException() {
   	if (err == null) {
-      @SuppressWarnings("unchecked")
-      // If only on part of request handled and it resulted in error, throw corresponding exception for convenience
-      SolrException singlePartialError;
-      List<String> handledPartsRef = SolrResponse.getHandledPartsRef(getValues());
-      if ((handledPartsRef != null) && handledPartsRef.size() == 1 && (singlePartialError = SolrResponse.getPartialError(partsRefToPartialErrorMap, getValues(), handledPartsRef.iterator().next())) != null) {
-      	SolrResponse.removeAllPartsRef(partsRefToPartialErrorMap, getValues());
-      	err = singlePartialError;
-      } else if (SolrResponse.numberOfPartialErrors(partsRefToPartialErrorMap, getValues()) > 0) {
-      	PartialErrors pes = new PartialErrors(ErrorCode.PRECONDITION_FAILED, "Some parts of the request resulted in errors - other parts might have succeeded. Client needs to check response for partial errors");
-      	pes.setPayload(getValues());
-      	err = pes;
-      }
+  	  err = SolrResponse.getException(partsRefToPartialErrorMap, getValues());
   	}
 
     return err;

@@ -23,6 +23,7 @@ import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
+import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.IsUpdateRequest;
@@ -30,6 +31,7 @@ import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.cloud.Aliases;
 import org.apache.solr.common.cloud.ClusterState;
@@ -42,6 +44,8 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.cloud.ZooKeeperException;
+import org.apache.solr.common.exceptions.PartialErrors;
+import org.apache.solr.common.exceptions.SolrExceptionCausedByException;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
@@ -51,6 +55,7 @@ import org.apache.solr.common.util.Hash;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SolrjNamedThreadFactory;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -608,12 +613,8 @@ public class CloudSolrClient extends SolrClient {
           Thread.currentThread().interrupt();
           throw new RuntimeException(e);
         } catch (ExecutionException e) {
-          exceptions.add(url, e.getCause());
+          exceptions.add(url, (e.getCause() != null)?e.getCause():e);
         }
-      }
-
-      if (exceptions.size() > 0) {
-        throw new RouteException(ErrorCode.SERVER_ERROR, exceptions, routes);
       }
     } else {
       for (Map.Entry<String, LBHttpSolrClient.Req> entry : routes.entrySet()) {
@@ -623,7 +624,7 @@ public class CloudSolrClient extends SolrClient {
           NamedList<Object> rsp = lbClient.request(lbRequest).getResponse();
           shardResponses.add(url, rsp);
         } catch (Exception e) {
-          throwSolrServerOrRuntimeException(e);
+          exceptions.add(url, (e.getCause() != null)?e.getCause():e);
         }
       }
     }
@@ -646,6 +647,7 @@ public class CloudSolrClient extends SolrClient {
         nonRoutableRequest = new UpdateRequest();
       }
       nonRoutableRequest.setParams(nonRoutableParams);
+      nonRoutableRequest.setAuthCredentials(updateRequest.getAuthCredentials());
       List<String> urlList = new ArrayList<>();
       urlList.addAll(routes.keySet());
       Collections.shuffle(urlList, rand);
@@ -654,13 +656,13 @@ public class CloudSolrClient extends SolrClient {
         LBHttpSolrClient.Rsp rsp = lbClient.request(req);
         shardResponses.add(urlList.get(0), rsp.getResponse());
       } catch (Exception e) {
-        throw new SolrException(ErrorCode.SERVER_ERROR, urlList.get(0), e);
+        exceptions.add(urlList.get(0), (e.getCause() != null)?e.getCause():e);
       }
     }
 
     long end = System.nanoTime();
 
-    RouteResponse rr =  condenseResponse(shardResponses, (long)((end - start)/1000000));
+    RouteResponse rr =  condenseResponse(routes, shardResponses, exceptions, (long)((end - start)/1000000));
     rr.setRouteResponses(shardResponses);
     rr.setRoutes(routes);
     return rr;
@@ -697,8 +699,8 @@ public class CloudSolrClient extends SolrClient {
     }
     return urlMap;
   }
-
-  public RouteResponse condenseResponse(NamedList response, long timeMillis) {
+  
+  public RouteResponse condenseResponse(Map<String, LBHttpSolrClient.Req> routes, NamedList response, NamedList<Throwable> exceptions, long timeMillis) {
     RouteResponse condensed = new RouteResponse();
     int status = 0;
     Integer rf = null;
@@ -718,6 +720,10 @@ public class CloudSolrClient extends SolrClient {
           rf = routeRf;
       }
       minRf = (Integer)header.get(UpdateRequest.MIN_REPFACT);
+      List<String> handledPartsRef = SolrResponse.getHandledPartsRef(shardResponse);
+      for (String handledPartRef : handledPartsRef) {
+        SolrResponse.addHandledPart(condensed, handledPartRef);
+      }
     }
 
     NamedList cheader = new NamedList();
@@ -729,6 +735,53 @@ public class CloudSolrClient extends SolrClient {
       cheader.add(UpdateRequest.MIN_REPFACT, minRf);
     
     condensed.add("responseHeader", cheader);
+    
+    Map<String, SolrException> partsRefToPartialErrorMap = new HashMap<String, SolrException>();
+    for (int i = 0; i < exceptions.size(); i++) {
+      String url = exceptions.getName(i);
+      Throwable e = exceptions.getVal(i);
+      // Multiple operations with a least one operation failing
+      if (e instanceof PartialErrors) {
+        PartialErrors pe = (PartialErrors)e;
+        Map<String, SolrException> pes = SolrResponse.getPartialErrors(null, pe.getPayload());
+        for (String key : pes.keySet()) {
+          SolrResponse.addPartialError(partsRefToPartialErrorMap, condensed, key, pes.get(key));
+        }
+        List<String> handledPartsRef = SolrResponse.getHandledPartsRef(pe.getPayload());
+        for (String handledPartRef : handledPartsRef) {
+          SolrResponse.addHandledPart(condensed, handledPartRef);
+        }
+      // Only one single operation, and it failed
+      } else {
+        SolrException pe;
+        if (e instanceof SolrException) pe = (SolrException)e;
+        else pe = new SolrExceptionCausedByException(ErrorCode.PRECONDITION_FAILED, "Error", e);
+        
+        LBHttpSolrClient.Req req = routes.get(url);
+        UpdateRequest ureq = (UpdateRequest)req.getRequest();
+  
+        List<SolrInputDocument> docsList = ureq.getDocuments();
+            
+        //List<List<SolrDoc>> docsList = response.sreq.ureq.getDocLists();
+        if (docsList != null && docsList.size() > 0) {
+          // It was a single update operation - just do get(0).get(0) because there is only one
+          SolrResponse.addPartialError(partsRefToPartialErrorMap, condensed, docsList.get(0).getUniquePartRef(), pe);
+          SolrResponse.addHandledPart(condensed, docsList.get(0).getUniquePartRef());
+        } else if (ureq.getDeleteQuery() != null) {
+          SolrResponse.addPartialError(partsRefToPartialErrorMap, condensed, "DBQ: " + url + " " + ureq.getDeleteQuery().get(0), pe);
+        } else if (ureq.getDeleteById() != null) {
+          Map<String,Map<String,Object>> idParamsMap = ureq.getDeleteByIdMap();
+          String id = idParamsMap.keySet().iterator().next();
+          Map<String, Object> params = idParamsMap.get(id);
+          Object version = (params != null)?params.get(UpdateRequest.VER):null;
+          SolrResponse.addPartialError(partsRefToPartialErrorMap, condensed, "DBI: id=" + id + ", version=" + version, pe);
+        }
+      }
+    }
+    
+    SolrException exception = SolrResponse.getException(partsRefToPartialErrorMap, condensed);
+    if (exception != null) throw exception;
+    
     return condensed;
   }
 

@@ -257,7 +257,7 @@ public class ClassicConsistencyHybridUpdateSemanticsSolrCloudTest extends Abstra
       cloudClient.add(failDoc, -1, UPDATE_CREDENTIALS);
     } catch (VersionConflict vc) {
       failedWithVersionConflict = true;
-      assertVersionConflict(vc, ((Long)failDoc.getFieldValue("_version_"))-1, null, true);
+      assertVersionConflict(vc, ((Long)failDoc.getFieldValue("_version_"))-1, failDoc.getUniquePartRef(), true);
     }
     assertTrue("Ought to fail with VersionConflict for doc with id " + failDoc.getFieldValue("id") + " only", failedWithVersionConflict);
   }

@@ -19,6 +19,7 @@ package org.apache.solr.client.solrj;
 
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
+import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.util.NamedList;
 
 import java.io.ByteArrayInputStream;
@@ -142,6 +143,26 @@ public abstract class SolrResponse implements Serializable {
   
   public static int numberOfPartialErrors(Map<String, SolrException> localPartialErrosMap, NamedList<Object> parentNamedList) {
   	return getPartialErrors(localPartialErrosMap, parentNamedList).size();
+  }
+  
+  public Exception getException() {
+    return getException(partsRefToPartialErrorMap, getResponse());
+  }
+  
+  public static SolrException getException(Map<String, SolrException> localPartialErrorsMap, NamedList<Object> parentNamedList) {
+    @SuppressWarnings("unchecked")
+    // If only on part of request handled and it resulted in error, throw corresponding exception for convenience
+    SolrException singlePartialError;
+    List<String> handledPartsRef = SolrResponse.getHandledPartsRef(parentNamedList);
+    if ((handledPartsRef != null) && handledPartsRef.size() == 1 && (singlePartialError = SolrResponse.getPartialError(localPartialErrorsMap, parentNamedList, handledPartsRef.iterator().next())) != null) {
+      SolrResponse.removeAllPartsRef(localPartialErrorsMap, parentNamedList);
+      return singlePartialError;
+    } else if (SolrResponse.numberOfPartialErrors(localPartialErrorsMap, parentNamedList) > 0) {
+      PartialErrors pes = new PartialErrors(ErrorCode.PRECONDITION_FAILED, "Some parts of the request resulted in errors - other parts might have succeeded. Client needs to check response for partial errors");
+      pes.setPayload(parentNamedList);
+      return pes;
+    }
+    return null;
   }
 	
   public static byte[] serializable(SolrResponse response) {
