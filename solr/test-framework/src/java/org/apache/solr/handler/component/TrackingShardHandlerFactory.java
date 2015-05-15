@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.cloud.MiniSolrCloudCluster;
 import org.apache.solr.common.cloud.DocCollection;
@@ -35,6 +36,7 @@ import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.core.CoreContainer;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.servlet.SolrDispatchFilter;
 
 /**
@@ -83,9 +85,9 @@ public class TrackingShardHandlerFactory extends HttpShardHandlerFactory {
   }
 
   @Override
-  public ShardHandler getShardHandler() {
+  public ShardHandler getShardHandler(final HttpClient httpClient, final AuthCredentialsSource authCredentialsSource) {
     final ShardHandlerFactory factory = this;
-    final ShardHandler wrapped = super.getShardHandler();
+    final ShardHandler wrapped = super.getShardHandler(httpClient, authCredentialsSource);
     return new ShardHandler() {
       @Override
       public void checkDistributed(ResponseBuilder rb) {

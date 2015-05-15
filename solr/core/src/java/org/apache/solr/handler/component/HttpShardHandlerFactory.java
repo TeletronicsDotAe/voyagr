@@ -113,35 +113,30 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
   // due to connection pooling limitations / races
   static final String USE_RETRIES = "useRetries";
 
+  public final ShardHandler getShardHandler(final HttpClient httpClient) {
+    return getShardHandler(httpClient, AuthCredentialsSource.useInternalAuthCredentials());
+  }
+
   /**
    * Get {@link ShardHandler} that uses the default http client.
    */
   @Override
-  public ShardHandler getShardHandler() {
-    return getShardHandler(AuthCredentialsSource.useInternalAuthCredentials());
-  }
-  
-  public ShardHandler getShardHandler(final HttpClient httpClient) {
-    return getShardHandler(httpClient, null);
-  }
-  
-  @Override
-  public ShardHandler getShardHandler(final AuthCredentialsSource authCredentialsSource) {
+  public final ShardHandler getShardHandler(final AuthCredentialsSource authCredentialsSource) {
     return getShardHandler(null, authCredentialsSource);
   }
   
   public ShardHandler getShardHandler(final HttpClient httpClient, final AuthCredentialsSource authCredentialsSource) {
     HttpClient httpClientToUse = httpClient;
-    AuthCredentialsSource authCredentialsToUse = authCredentialsSource;
+    AuthCredentialsSource authCredentialsSourceToUse = authCredentialsSource;
     if (httpClientToUse == null) {
       if (AuthCredentialsSource.useInternalAuthCredentials() == authCredentialsSource) {
         httpClientToUse = defaultInternalAuthClient;
-        authCredentialsToUse = null;
+        authCredentialsSourceToUse = null;
       } else {
         httpClientToUse = defaultNonAuthClient;
       }
     }
-    return new HttpShardHandler(this, defaultInternalAuthClient, authCredentialsToUse);
+    return new HttpShardHandler(this, httpClientToUse, authCredentialsSourceToUse);
   }
 
   private HttpClient getHttpClient(AuthCredentials authCredentials) {

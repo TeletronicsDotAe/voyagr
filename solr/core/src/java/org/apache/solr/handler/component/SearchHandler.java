@@ -188,7 +188,7 @@ public class SearchHandler extends RequestHandlerBase implements SolrCoreAware ,
 
     final RTimer timer = rb.isDebug() ? req.getRequestTimer() : null;
 
-    ShardHandler shardHandler1 = ((HttpShardHandlerFactory)shardHandlerFactory).getShardHandler(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req));
+    ShardHandler shardHandler1 = shardHandlerFactory.getShardHandler(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req));
     shardHandler1.checkDistributed(rb);
 
     if (timer == null) {

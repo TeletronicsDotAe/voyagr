@@ -30,7 +30,9 @@ import java.util.Locale;
 
 public abstract class ShardHandlerFactory {
 
-  public abstract ShardHandler getShardHandler();
+  public final ShardHandler getShardHandler() {
+    return getShardHandler(AuthCredentialsSource.useInternalAuthCredentials());
+  }
   
   public abstract ShardHandler getShardHandler(AuthCredentialsSource authCredentialsSource);
 
