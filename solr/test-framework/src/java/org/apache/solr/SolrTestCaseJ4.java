@@ -1888,7 +1888,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     assertNotNull(partialErrorsObj);
     assertTrue(partialErrorsObj instanceof List<?>);
     List<NamedList<Object>> partialErrors = (List<NamedList<Object>>)partialErrorsObj; 
-    assertEquals(expectedNoOfPartialErrors, partialErrors.size());
+    assertEquals(partialErrors.toString(), expectedNoOfPartialErrors, partialErrors.size());
     for (int i = 0; i < expectedNoOfPartialErrors; i++) {
       NamedList<Object> innerPayload = partialErrors.get(i);
       assertTrue(innerPayload.size() >= 4);
@@ -1901,7 +1901,7 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     assertNotNull(handledPartsObj);
     assertTrue(handledPartsObj instanceof List<?>);
     List<String> handledParts = (List<String>)handledPartsObj;
-    assertEquals(expectedNoOfHandledParts, handledParts.size());
+    assertEquals(handledParts.toString(), expectedNoOfHandledParts, handledParts.size());
   }
   
   public void assertVersionConflict(VersionConflict vc, long expectedCurrentVersion, String expectedPartRef, boolean responseHeaderExpected) {
@@ -1914,12 +1914,12 @@ public abstract class SolrTestCaseJ4 extends LuceneTestCase {
     int expectedPayloadSize = 1;
     if (partRefExpected) expectedPayloadSize++;
     if (responseHeaderExpected) expectedPayloadSize++;
-    assertEquals(expectedPayloadSize, payload.size());
+    assertEquals(payload.toString(), expectedPayloadSize, payload.size());
     
     NamedList<Object> properties = (NamedList<Object>)payload.get("properties");
     assertNotNull(properties);
     // currentVersion and only currentVersion in properties
-    assertEquals(1, properties.size());
+    assertEquals(properties.toString(), 1, properties.size());
     assertEquals(expectedCurrentVersion, vc.getCurrentVersion());
     
     if (partRefExpected) assertNotNull(payload.get("partRef"));
