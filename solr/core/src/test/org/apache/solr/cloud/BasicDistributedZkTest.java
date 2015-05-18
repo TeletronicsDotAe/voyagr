@@ -742,7 +742,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
       params.set("qt", "/admin/mbeans?key=updateHandler&stats=true");
       // use generic request to avoid extra processing of queries
       QueryRequest req = new QueryRequest(params);
-      req.setAuthCredentials(SEARCH_CREDENTIALS);
+      req.setAuthCredentials(ALL_CREDENTIALS);
       NamedList<Object> resp = client.request(req);
       NamedList mbeans = (NamedList) resp.get("solr-mbeans");
       NamedList uhandlerCat = (NamedList) mbeans.get("UPDATEHANDLER");
