@@ -1687,7 +1687,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
   protected SolrClient createNewSolrClient(String collection, String baseUrl) {
     try {
       // setup the server...
-      HttpSolrClient client = new HttpSolrClient(baseUrl + "/" + collection);
+      HttpSolrClient client = createNewSolrClientBase(baseUrl + "/" + collection);
       client.setConnectionTimeout(DEFAULT_CONNECTION_TIMEOUT);
       client.setDefaultMaxConnectionsPerHost(100);
       client.setMaxTotalConnections(100);
@@ -1862,7 +1862,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
         .getBaseURL();
     baseUrl = baseUrl.substring(0, baseUrl.length() - "collection1".length());
 
-    try (HttpSolrClient baseClient = new HttpSolrClient(baseUrl)) {
+    try (HttpSolrClient baseClient = createNewSolrClientBase(baseUrl)) {
       baseClient.setConnectionTimeout(15000);
       baseClient.setSoTimeout(60000 * 5);
       return baseClient.request(request);

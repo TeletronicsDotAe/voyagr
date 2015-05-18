@@ -477,7 +477,10 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
         // TODO better implementation needed - does not handle added SolrRequest-types
         if (request instanceof AbstractUpdateRequest) return UPDATE_CREDENTIALS;
         if (request instanceof DirectXmlRequest) return UPDATE_CREDENTIALS;
-        if (request instanceof QueryRequest) return SEARCH_CREDENTIALS;
+        if (request instanceof QueryRequest) {
+          if (request.getPath() != null && request.getPath().startsWith("/admin")) return ALL_CREDENTIALS;
+          return SEARCH_CREDENTIALS;
+        }
         return ALL_CREDENTIALS;
       }
       
