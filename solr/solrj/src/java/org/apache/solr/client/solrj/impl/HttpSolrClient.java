@@ -515,7 +515,17 @@ public class HttpSolrClient extends SolrClient {
         success = true;
         return rsp;
       }
-      
+
+      String charset = EntityUtils.getContentCharSet(response.getEntity());
+      if (httpStatus != HttpStatus.SC_OK) {
+        StringBuilder additionalMsg = new StringBuilder();
+        additionalMsg.append( "\n\n" );
+        additionalMsg.append( "request: "+method.getURI() );
+        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, respBody, charset, httpStatus):null;
+        SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
+        throw ex;
+      }
+
       String procCt = processor.getContentType();
       if (procCt != null) {
         String procMimeType = ContentType.parse(procCt).getMimeType().trim().toLowerCase(Locale.ROOT);
@@ -539,15 +549,6 @@ public class HttpSolrClient extends SolrClient {
         }
       }
       
-      String charset = EntityUtils.getContentCharSet(response.getEntity());
-      if (httpStatus != HttpStatus.SC_OK) {
-        StringBuilder additionalMsg = new StringBuilder();
-        additionalMsg.append( "\n\n" );
-        additionalMsg.append( "request: "+method.getURI() );
-        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, respBody, charset, httpStatus):null;
-        SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
-        throw ex;
-      }
       success = true;
       return getProcessedResponse(processor, respBody, charset, httpStatus);
     } catch (ConnectException e) {
