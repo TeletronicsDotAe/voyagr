@@ -569,15 +569,6 @@ public class PeerSync  {
     return true;
   }
 
-  public void close() {
-    try {
-      shardHandlerFactory.close();
-    } catch (Exception e) {
-      SolrException.log(log, e);
-    }
-  }
-
-
   /** Requests and applies recent updates from peers */
   public static void sync(SolrCore core, List<String> replicas, int nUpdates) {
     ShardHandlerFactory shardHandlerFactory = core.getCoreDescriptor().getCoreContainer().getShardHandlerFactory();

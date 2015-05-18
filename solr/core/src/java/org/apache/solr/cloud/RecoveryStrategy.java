@@ -387,7 +387,6 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           // + " i am:" + zkController.getNodeName());
           PeerSync peerSync = new PeerSync(core,
               Collections.singletonList(leaderUrl), ulog.getNumRecordsToKeep(), false, false);
-          try {
           peerSync.setStartingVersions(recentVersions);
           boolean syncSuccess = peerSync.sync();
           if (syncSuccess) {
@@ -425,9 +424,6 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           }
 
           log.info("PeerSync Recovery was not successful - trying replication. core=" + coreName);
-          } finally {
-            peerSync.close();
-          }
         }
 
         if (isClosed()) {

@@ -167,11 +167,7 @@ public class SyncStrategy {
     // TODO: as an assurance, we should still try and tell the sync nodes that we couldn't reach
     // to recover once more?
     PeerSync peerSync = new PeerSync(core, syncWith, core.getUpdateHandler().getUpdateLog().getNumRecordsToKeep(), true, true, peerSyncOnlyWithActive);
-    try {
-      return peerSync.sync();
-    } finally {
-      peerSync.close();
-    }
+    return peerSync.sync();
   }
   
   private void syncToMe(ZkController zkController, String collection,

@@ -589,14 +589,10 @@ public class RealTimeGetComponent extends SearchComponent
     boolean cantReachIsSuccess = rb.req.getParams().getBool("cantReachIsSuccess", false);
     
     PeerSync peerSync = new PeerSync(rb.req.getCore(), replicas, nVersions, cantReachIsSuccess, true);
-    try {
     boolean success = peerSync.sync();
     
     // TODO: more complex response?
     rb.rsp.add("sync", success);
-    } finally {
-      peerSync.close();
-    }
   }
   
 
