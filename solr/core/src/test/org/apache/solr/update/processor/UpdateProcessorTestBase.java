@@ -67,7 +67,6 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
     SolrQueryRequest req = new LocalSolrQueryRequest(core, requestParams);
     SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
     try {
-      SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
       AddUpdateCommand cmd = new AddUpdateCommand(req);
       cmd.solrDoc = docIn;
 
