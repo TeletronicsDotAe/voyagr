@@ -23,8 +23,11 @@ import java.util.regex.Pattern;
 
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicResponseHandler;
+import org.apache.http.protocol.HttpContext;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
+
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
 
 public class CheckBackupStatus extends SolrTestCaseJ4 {
   String response = null;
@@ -46,7 +49,7 @@ public class CheckBackupStatus extends SolrTestCaseJ4 {
 
   public void fetchStatus() throws IOException {
     String masterUrl = client.getBaseURL() + "/replication?command=" + ReplicationHandler.CMD_DETAILS;
-    response = client.getHttpClient().execute(new HttpGet(masterUrl), new BasicResponseHandler());
+    response = client.getHttpClient().execute(new HttpGet(masterUrl), new BasicResponseHandler(), HttpSolrClient.getHttpContext(ALL_CREDENTIALS, false, client.getBaseURL()));
     if(pException.matcher(response).find()) {
       fail("Failed to create backup");
     }

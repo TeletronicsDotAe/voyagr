@@ -229,10 +229,11 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     params.set("name", collectionName);
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     try {
       makeRequest(baseUrl, request);
       fail("Expected to fail, because collection is not in clusterstate");
-    } catch (RemoteSolrException e) {
+    } catch (SolrException e) {
       
     }
     
@@ -467,6 +468,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     dataDir = createTempDir().toFile().getAbsolutePath();
     createCmd.setDataDir(dataDir);
     createCmd.setNumShards(1);
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     if (secondConfigSet) {
       createCmd.setCollectionConfigName("conf1");
     }
@@ -523,6 +525,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
     String dataDir = createTempDir().toFile().getAbsolutePath();
     createCmd.setDataDir(dataDir);
     createCmd.setNumShards(1);
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     if (secondConfigSet) {
       createCmd.setCollectionConfigName("conf1");
     }
@@ -742,7 +745,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
 
       collectionClient.commit(UPDATE_CREDENTIALS);
 
-      assertEquals(3, collectionClient.query(new SolrQuery("*:*")).getResults().getNumFound());
+      assertEquals(3, collectionClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults().getNumFound());
     }
 
     // lets try a collection reload
@@ -1164,7 +1167,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
       assertNotNull(newReplica);
 
       HttpSolrClient coreclient = new HttpSolrClient(newReplica.getStr(ZkStateReader.BASE_URL_PROP));
-      CoreAdminResponse status = CoreAdminRequest.getStatus(newReplica.getStr("core"), coreclient);
+      CoreAdminResponse status = CoreAdminRequest.getStatus(newReplica.getStr("core"), coreclient, ALL_CREDENTIALS);
       NamedList<Object> coreStatus = status.getCoreStatus(newReplica.getStr("core"));
       String instanceDirStr = (String) coreStatus.get("instanceDir");
       assertEquals(Paths.get(instanceDirStr).toString(), instancePathStr);
