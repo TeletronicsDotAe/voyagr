@@ -74,6 +74,7 @@ import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.response.BinaryResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.SchemaManager;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.util.CommandOperation;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.zookeeper.KeeperException;
@@ -358,8 +359,7 @@ public class SolrConfigHandler extends RequestHandlerBase {
               params.getZnodeVersion(),
               RequestParams.RESOURCE,
               params.toByteArray(), true);
-          waitForAllReplicasState(req.getCore().getCoreDescriptor().getCloudDescriptor().getCollectionName(),
-              req.getCore().getCoreDescriptor().getCoreContainer().getZkController(),
+          waitForAllReplicasState(req,
               RequestParams.NAME,
               latestVersion, 30);
         }
@@ -419,8 +419,7 @@ public class SolrConfigHandler extends RequestHandlerBase {
         int latestVersion = ZkController.persistConfigResourceToZooKeeper((ZkSolrResourceLoader) loader, overlay.getZnodeVersion(),
             ConfigOverlay.RESOURCE_NAME, overlay.toByteArray(), true);
         log.info("Executed config commands successfully and persisted to ZK {}", ops);
-        waitForAllReplicasState(req.getCore().getCoreDescriptor().getCloudDescriptor().getCollectionName(),
-            req.getCore().getCoreDescriptor().getCoreContainer().getZkController(),
+        waitForAllReplicasState(req,
             ConfigOverlay.NAME,
             latestVersion, 30);
       } else {
@@ -646,17 +645,18 @@ public class SolrConfigHandler extends RequestHandlerBase {
    * Block up to a specified maximum time until we see agreement on the schema
    * version in ZooKeeper across all replicas for a collection.
    */
-  private static void waitForAllReplicasState(String collection,
-                                              ZkController zkController,
+  private static void waitForAllReplicasState(SolrQueryRequest req,
                                               String prop,
                                               int expectedVersion,
                                               int maxWaitSecs) {
+    String collection = req.getCore().getCoreDescriptor().getCloudDescriptor().getCollectionName();
+    ZkController zkController = req.getCore().getCoreDescriptor().getCoreContainer().getZkController();
     long startMs = System.currentTimeMillis();
     // get a list of active replica cores to query for the schema zk version (skipping this core of course)
     List<PerReplicaCallable> concurrentTasks = new ArrayList<>();
 
     for (String coreUrl : getActiveReplicaCoreUrls(zkController, collection)) {
-      PerReplicaCallable e = new PerReplicaCallable(coreUrl, prop, expectedVersion, maxWaitSecs);
+      PerReplicaCallable e = new PerReplicaCallable(coreUrl, prop, expectedVersion, maxWaitSecs, AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req));
       concurrentTasks.add(e);
     }
     if (concurrentTasks.isEmpty()) return; // nothing to wait for ...
@@ -746,12 +746,13 @@ public class SolrConfigHandler extends RequestHandlerBase {
     Number remoteVersion = null;
     int maxWait;
 
-    PerReplicaCallable(String coreUrl, String prop, int expectedZkVersion, int maxWait) {
+    PerReplicaCallable(String coreUrl, String prop, int expectedZkVersion, int maxWait, AuthCredentialsSource authCredentialsSource) {
       super(METHOD.GET, "/config/" + ZNODEVER);
       this.coreUrl = coreUrl;
       this.expectedZkVersion = expectedZkVersion;
       this.prop = prop;
       this.maxWait = maxWait;
+      this.setAuthCredentials(authCredentialsSource.getAuthCredentials());
     }
 
     @Override

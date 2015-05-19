@@ -27,6 +27,7 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
+import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -34,10 +35,13 @@ import org.apache.solr.security.AuthCredentials;
 
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
 /**
  * Facilitates testing Solr's REST API via a provided embedded Jetty
@@ -209,6 +213,18 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
       throw new RuntimeException(e);
     }
   }
+  
+  protected AuthCredentials getAuthCredentials(HttpUriRequest request) {
+    String path = request.getURI().getPath();
+    System.out.println("****** " + path);
+    if (path.startsWith("/update")) return UPDATE_CREDENTIALS;
+    if (path.startsWith("/search") || path.startsWith("/terms") || path.startsWith("/get")) return SEARCH_CREDENTIALS;
+    return ALL_CREDENTIALS;
+  }
+  
+  public HttpContext getHttpContextForRequest(HttpUriRequest request) {
+    return HttpSolrClient.getHttpContext(getAuthCredentials(request), true, getBaseURL());
+  }
 
   /**
    * Executes the given request and returns the response.
@@ -216,7 +232,7 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   private String getResponse(HttpUriRequest request) throws IOException {
     HttpEntity entity = null;
     try {
-      final HttpContext context = HttpSolrClient.getHttpContext(authCredentials, false, getBaseURL());
+      final HttpContext context = getHttpContextForRequest(request);
       entity = httpClient.execute(request, context).getEntity();
       return EntityUtils.toString(entity, StandardCharsets.UTF_8);
     } finally {

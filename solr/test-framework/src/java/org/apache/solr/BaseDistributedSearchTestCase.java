@@ -21,14 +21,17 @@ import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 import junit.framework.Assert;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.http.client.HttpClient;
 import org.apache.lucene.util.Constants;
 import org.apache.lucene.util.TestUtil;
+import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettyConfig;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
+import org.apache.solr.client.solrj.impl.BinaryResponseParser;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.DirectXmlRequest;
@@ -467,24 +470,39 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     }
   }
   
-  protected final HttpSolrClient createNewSolrClientBase(String url) {
-    return new HttpSolrClient(url) {
-      
-      protected AuthCredentials getAuthCredentials(SolrRequest request) {
-        AuthCredentials result = super.getAuthCredentials(request);
-        if (result != null) return result;
-        // TODO test if we are running with common-security, and only then do the credentials below
-        // TODO better implementation needed - does not handle added SolrRequest-types
-        if (request instanceof AbstractUpdateRequest) return UPDATE_CREDENTIALS;
-        if (request instanceof DirectXmlRequest) return UPDATE_CREDENTIALS;
-        if (request instanceof QueryRequest) {
-          if (request.getPath() != null && request.getPath().startsWith("/admin")) return ALL_CREDENTIALS;
-          return SEARCH_CREDENTIALS;
-        }
-        return ALL_CREDENTIALS;
+  protected class AutoCredentialsHttpSolrClient extends HttpSolrClient {
+    
+    public AutoCredentialsHttpSolrClient(String baseURL) {
+      super(baseURL);
+    }
+    
+    public AutoCredentialsHttpSolrClient(String baseURL, HttpClient client) {
+      super(baseURL, client);
+    }
+    
+    public AutoCredentialsHttpSolrClient(String baseURL, HttpClient client, ResponseParser parser) {
+      super(baseURL, client, parser);
+    }
+
+    @Override
+    protected AuthCredentials getAuthCredentials(SolrRequest request) {
+      AuthCredentials result = super.getAuthCredentials(request);
+      if (result != null) return result;
+      // TODO test if we are running with common-security, and only then do the credentials below
+      // TODO better implementation needed - does not handle added SolrRequest-types
+      if (request instanceof AbstractUpdateRequest) return UPDATE_CREDENTIALS;
+      if (request instanceof DirectXmlRequest) return UPDATE_CREDENTIALS;
+      if (request instanceof QueryRequest) {
+        if (request.getPath() != null && request.getPath().startsWith("/admin")) return ALL_CREDENTIALS;
+        return SEARCH_CREDENTIALS;
       }
-      
-    };
+      return ALL_CREDENTIALS;
+    }
+
+  }
+  
+  protected final HttpSolrClient createNewSolrClientBase(String url) {
+    return new AutoCredentialsHttpSolrClient(url);
   }
   
   protected String buildUrl(int port) {

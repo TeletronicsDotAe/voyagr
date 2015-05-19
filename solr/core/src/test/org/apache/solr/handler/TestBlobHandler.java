@@ -53,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.solr.core.ConfigOverlay.getObjectByPath;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
 
 public class TestBlobHandler extends AbstractFullDistribZkTestBase {
   static final Logger log = LoggerFactory.getLogger(TestBlobHandler.class);
@@ -180,7 +181,9 @@ public class TestBlobHandler extends AbstractFullDistribZkTestBase {
       httpPost = new HttpPost(baseUrl + "/.system/blob/" + blobName);
       httpPost.setHeader("Content-Type", "application/octet-stream");
       httpPost.setEntity(new ByteArrayEntity(bytarr.array(), bytarr.arrayOffset(), bytarr.limit()));
-      entity = cloudClient.getLbClient().getHttpClient().execute(httpPost).getEntity();
+      entity = cloudClient.getLbClient().getHttpClient().execute(httpPost, 
+          HttpSolrClient.getHttpContext(ALL_CREDENTIALS, false, baseUrl)
+          ).getEntity();
       try {
         response = EntityUtils.toString(entity, StandardCharsets.UTF_8);
         Map m = (Map) ObjectBuilder.getVal(new JSONParser(new StringReader(response)));

@@ -37,6 +37,8 @@ import java.util.zip.ZipInputStream;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.protocol.HttpContext;
+import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.DocCollection;
@@ -44,6 +46,7 @@ import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.handler.admin.CollectionsHandler;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.util.CryptoKeys;
 import org.apache.solr.util.SimplePostTool;
 import org.slf4j.Logger;
@@ -87,14 +90,15 @@ public class JarRepository {
         Replica replica = getSystemCollReplica();
         String url = replica.getStr(BASE_URL_PROP) + "/.system/blob/" + key + "?wt=filestream";
 
+        HttpContext context = HttpSolrClient.getHttpContext(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials(), false, replica.getStr(BASE_URL_PROP));
         HttpClient httpClient = coreContainer.getUpdateShardHandler().getHttpClient();
         HttpGet httpGet = new HttpGet(url);
         ByteBuffer b;
         try {
-          HttpResponse entity = httpClient.execute(httpGet);
+          HttpResponse entity = httpClient.execute(httpGet, context);
           int statusCode = entity.getStatusLine().getStatusCode();
           if (statusCode != 200) {
-            throw new SolrException(SolrException.ErrorCode.NOT_FOUND, "no such blob or version available: " + key);
+            throw new SolrException(SolrException.ErrorCode.NOT_FOUND, "no such blob or version available: " + key  + ". Status: " + entity.getStatusLine());
           }
           b = SimplePostTool.inputStreamToByteArray(entity.getEntity().getContent());
         } catch (Exception e) {
