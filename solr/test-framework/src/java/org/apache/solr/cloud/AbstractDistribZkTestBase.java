@@ -194,9 +194,9 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
       }
         // If waitToSeeLiveRecovering, do not start counting secs before saw recovering
       cnt++;
-        if (verbose) System.out.println("cnt: " + cnt);
       }
     }
+
     log.info("Recoveries finished - collection: " + collection);
   }
 
