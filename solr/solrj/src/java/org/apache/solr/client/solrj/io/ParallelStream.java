@@ -38,6 +38,7 @@ import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.util.Base64;
+import org.apache.solr.security.AuthCredentials;
 
 /**
  * The ParallelStream decorates a TupleStream implementation and pushes it to N workers for parallel execution.
@@ -56,7 +57,8 @@ public class ParallelStream extends CloudSolrStream {
                         String collection,
                         TupleStream tupleStream,
                         int workers,
-                        Comparator<Tuple> comp) throws IOException {
+                        Comparator<Tuple> comp,
+                        AuthCredentials authCredentials) throws IOException {
     this.zkHost = zkHost;
     this.collection = collection;
     this.workers = workers;
@@ -69,6 +71,7 @@ public class ParallelStream extends CloudSolrStream {
     this.encoded = Base64.byteArrayToBase64(bytes, 0, bytes.length);
     this.encoded = URLEncoder.encode(this.encoded, "UTF-8");
     this.tuples = new TreeSet();
+    this.authCredentials = authCredentials;
   }
 
   public List<TupleStream> children() {
@@ -128,7 +131,7 @@ public class ParallelStream extends CloudSolrStream {
         Replica rep = shuffler.get(w);
         ZkCoreNodeProps zkProps = new ZkCoreNodeProps(rep);
         String url = zkProps.getCoreUrl();
-        SolrStream solrStream = new SolrStream(url, params);
+        SolrStream solrStream = new SolrStream(url, params, authCredentials);
         solrStreams.add(solrStream);
       }
 

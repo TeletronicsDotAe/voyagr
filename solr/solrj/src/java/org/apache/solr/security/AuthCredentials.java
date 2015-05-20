@@ -1,5 +1,6 @@
 package org.apache.solr.security;
 
+import java.io.Serializable;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Observable;
@@ -30,9 +31,9 @@ import org.apache.solr.client.solrj.impl.HttpSolrServer;
  * limitations under the License.
  */
 
-public class AuthCredentials extends Observable {
+public class AuthCredentials extends Observable implements Serializable {
 
-  public interface AbstractAuthMethod {}
+  public interface AbstractAuthMethod extends Serializable {}
   
   // For now only basic http auth supported
   public static class BasicHttpAuth implements AbstractAuthMethod {
