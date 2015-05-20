@@ -334,7 +334,12 @@ public class SolrException extends RuntimeException {
       	log.warn("Could not create exception of type " + className + ".", e);
       }
 		}
-    return new SolrException(SolrException.ErrorCode.getErrorCode(code), msg);
+    ErrorCode errorCode = SolrException.ErrorCode.getErrorCode(code);
+    if (errorCode == ErrorCode.UNKNOWN) {
+      return new SolrException(code, msg, null);
+    } else {
+      return new SolrException(errorCode, msg);
+    }
 	}
   
   // --------- Encoding/decoding in String/NamedList/HttpServletResponse - end -------------------- //
