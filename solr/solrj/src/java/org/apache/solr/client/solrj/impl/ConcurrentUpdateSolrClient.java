@@ -161,7 +161,7 @@ public class ConcurrentUpdateSolrClient extends SolrClient {
                 queue.poll(pollQueueTime, TimeUnit.MILLISECONDS);
             if (updateRequest == null)
               break;
-                       
+            
             String contentType = client.requestWriter.getUpdateContentType();
             final boolean isXml = ClientUtils.TEXT_XML.equals(contentType);
 
@@ -234,6 +234,7 @@ public class ConcurrentUpdateSolrClient extends SolrClient {
             // be re-sent so to speak). In plain HttpSolrServer, where preemptive authentication is not forced, re-send capabilities are
             // achieved by wrapping a BufferedHttpEntity round the entity, but it cannot be done here.
             updateRequest.setPreemptiveAuthentication(true);
+            ConcurrentUpdateSolrClient.this.manipulateRequestBeforeFire(updateRequest);
             HttpContext context = client.getHttpContextForRequest(updateRequest);
                         
             response = (context != null)?client.getHttpClient().execute(method, context):client.getHttpClient().execute(method);
@@ -287,7 +288,7 @@ public class ConcurrentUpdateSolrClient extends SolrClient {
   }
 
   @Override
-  public NamedList<Object> request(final SolrRequest request, String collection)
+  public NamedList<Object> doRequest(final SolrRequest request, String collection)
       throws SolrServerException, IOException {
     if (!(request instanceof UpdateRequest)) {
       return client.request(request, collection);

@@ -25,9 +25,12 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+
 import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.security.AuthCredentials;
+
+import com.google.common.base.Optional;
 
 /**
  * 
@@ -47,7 +50,7 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
   private ResponseParser responseParser;
   private StreamingResponseCallback callback;
   private Set<String> queryParams;
-  private AuthCredentials authCredentials;
+  private Optional<AuthCredentials> authCredentials;
   private boolean preemptiveAuthentication = true;
   
   //---------------------------------------------------------
@@ -101,11 +104,20 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
     this.callback = callback;
   }
   
-  public AuthCredentials getAuthCredentials() {
+  /** As in SolrQueryRequest
+   * - null means that no one has yet considered what it should be
+   * - absent means that it has explicitly been decided not to use any credentials
+   * - non-null and not absent means that it has explicitly been decided to use the present credentials
+   */
+  public Optional<AuthCredentials> getAuthCredentials() {
     return authCredentials;
   }
 
   public void setAuthCredentials(AuthCredentials authCredentials) {
+    this.authCredentials = Optional.fromNullable(authCredentials);
+  }
+
+  public void setAuthCredentials(Optional<AuthCredentials> authCredentials) {
     this.authCredentials = authCredentials;
   }
 

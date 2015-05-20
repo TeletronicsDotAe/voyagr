@@ -222,7 +222,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
       params.add("q", "id:" + id);
       params.add("distrib", "false");
       QueryRequest queryRequest = new QueryRequest(params);
-      try (HttpSolrClient solrClient = new HttpSolrClient(url)) {
+      try (HttpSolrClient solrClient = createNewSolrClientBase(url)) {
         QueryResponse queryResponse = queryRequest.process(solrClient);
         SolrDocumentList docList = queryResponse.getResults();
         assertTrue(docList.getNumFound() == 1);
@@ -244,7 +244,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
     assertTrue(docs.getNumFound() == 0);
     
     // Test Multi-Threaded routed updates for UpdateRequest
-    try (CloudSolrClient threadedClient = new CloudSolrClient(zkServer.getZkAddress())) {
+    try (CloudSolrClient threadedClient = new AutoCredentialsCloudSolrClient(zkServer.getZkAddress())) {
       threadedClient.setParallelUpdates(true);
       threadedClient.setDefaultCollection(collectionName);
       response = threadedClient.request(request);
@@ -263,7 +263,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
         params.add("q", "id:" + id);
         params.add("distrib", "false");
         QueryRequest queryRequest = new QueryRequest(params);
-        try (HttpSolrClient solrClient = new HttpSolrClient(url)) {
+        try (HttpSolrClient solrClient = createNewSolrClientBase(url)) {
           QueryResponse queryResponse = queryRequest.process(solrClient);
           SolrDocumentList docList = queryResponse.getResults();
           assertTrue(docList.getNumFound() == 1);
@@ -477,7 +477,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
       SolrServerException, IOException {
 
     NamedList<Object> resp;
-    try (HttpSolrClient client = new HttpSolrClient(baseUrl + "/"+ collectionName)) {
+    try (HttpSolrClient client = createNewSolrClientBase(baseUrl + "/"+ collectionName)) {
       client.setConnectionTimeout(15000);
       client.setSoTimeout(60000);
       ModifiableSolrParams params = new ModifiableSolrParams();
@@ -547,9 +547,9 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
       Replica r = coll.getSlices().iterator().next().getReplicas().iterator().next();
 
       SolrQuery q = new SolrQuery().setQuery("*:*");
-      HttpSolrClient.RemoteSolrException sse = null;
+      SolrException sse = null;
 
-      try (HttpSolrClient solrClient = new HttpSolrClient(r.getStr(ZkStateReader.BASE_URL_PROP) + "/"+collectionName)) {
+      try (HttpSolrClient solrClient = createNewSolrClientBase(r.getStr(ZkStateReader.BASE_URL_PROP) + "/"+collectionName)) {
 
         log.info("should work query, result {}", solrClient.query(q));
         //no problem
@@ -585,13 +585,13 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
       log.info("the node which does not serve this collection{} ",theNode);
       assertNotNull(theNode);
 
-      try (SolrClient solrClient = new HttpSolrClient(theNode + "/"+collectionName)) {
+      try (SolrClient solrClient = createNewSolrClientBase(theNode + "/"+collectionName)) {
 
         q.setParam(CloudSolrClient.STATE_VERSION, collectionName + ":" + (coll.getZNodeVersion()-1));
         try {
           QueryResponse rsp = solrClient.query(q);
           log.info("error was expected");
-        } catch (HttpSolrClient.RemoteSolrException e) {
+        } catch (SolrException e) {
           sse = e;
         }
         assertNotNull(sse);
@@ -602,7 +602,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
   }
 
   public void testShutdown() throws IOException {
-    try (CloudSolrClient client = new CloudSolrClient("[ff01::114]:33332")) {
+    try (CloudSolrClient client = new AutoCredentialsCloudSolrClient("[ff01::114]:33332")) {
       client.setZkConnectTimeout(100);
       client.connect();
       fail("Expected exception");
@@ -619,7 +619,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
     exception.expect(SolrException.class);
     exception.expectMessage("cluster not found/not ready");
 
-    try (CloudSolrClient client = new CloudSolrClient(zkServer.getZkAddress() + "/xyz/foo")) {
+    try (CloudSolrClient client = new AutoCredentialsCloudSolrClient(zkServer.getZkAddress() + "/xyz/foo")) {
       client.setDefaultCollection(DEFAULT_COLLECTION);
       client.setZkClientTimeout(1000 * 60);
       client.connect();
@@ -633,7 +633,7 @@ public class CloudSolrClientTest extends AbstractFullDistribZkTestBase {
     params.set(HttpClientUtil.PROP_SO_TIMEOUT, 1000);
 
     try (CloseableHttpClient client = HttpClientUtil.createClient(params);
-         CloudSolrClient solrClient = new CloudSolrClient(zkServer.getZkAddress(), client)) {
+         CloudSolrClient solrClient = new AutoCredentialsCloudSolrClient(zkServer.getZkAddress(), client)) {
 
       assertTrue(solrClient.getLbClient().getHttpClient() == client);
 

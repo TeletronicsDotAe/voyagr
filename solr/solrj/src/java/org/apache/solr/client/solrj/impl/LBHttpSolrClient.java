@@ -512,7 +512,7 @@ public class LBHttpSolrClient extends SolrClient {
    * @throws IOException If there is a low-level I/O error.
    */
   @Override
-  public NamedList<Object> request(final SolrRequest request, String collection)
+  public NamedList<Object> doRequest(final SolrRequest request, String collection)
           throws SolrServerException, IOException {
     Exception ex = null;
     ServerWrapper[] serverList = aliveServerList;

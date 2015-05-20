@@ -58,6 +58,8 @@ import org.junit.runners.model.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Optional;
+
 import javax.servlet.Filter;
 
 import java.io.File;
@@ -470,6 +472,10 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     }
   }
   
+  protected final HttpSolrClient createNewSolrClientBase(String url) {
+    return new AutoCredentialsHttpSolrClient(url);
+  }
+  
   protected class AutoCredentialsHttpSolrClient extends HttpSolrClient {
     
     public AutoCredentialsHttpSolrClient(String baseURL) {
@@ -485,24 +491,27 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     }
 
     @Override
-    protected AuthCredentials getAuthCredentials(SolrRequest request) {
-      AuthCredentials result = super.getAuthCredentials(request);
-      if (result != null) return result;
-      // TODO test if we are running with common-security, and only then do the credentials below
-      // TODO better implementation needed - does not handle added SolrRequest-types
-      if (request instanceof AbstractUpdateRequest) return UPDATE_CREDENTIALS;
-      if (request instanceof DirectXmlRequest) return UPDATE_CREDENTIALS;
-      if (request instanceof QueryRequest) {
-        if (request.getPath() != null && request.getPath().startsWith("/admin")) return ALL_CREDENTIALS;
-        return SEARCH_CREDENTIALS;
-      }
-      return ALL_CREDENTIALS;
+    protected Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+      return BaseDistributedSearchTestCase.getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(request);
     }
 
   }
   
-  protected final HttpSolrClient createNewSolrClientBase(String url) {
-    return new AutoCredentialsHttpSolrClient(url);
+  protected static Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+    // TODO better implementation needed - does not handle added SolrRequest-types
+    AuthCredentials authCredentials;
+    if (RUN_WITH_COMMON_SECURITY) {
+      if (request instanceof AbstractUpdateRequest) authCredentials = UPDATE_CREDENTIALS;
+      else if (request instanceof DirectXmlRequest) authCredentials = UPDATE_CREDENTIALS;
+      else if (request instanceof QueryRequest) {
+        if (request.getPath() != null && request.getPath().startsWith("/admin")) authCredentials = ALL_CREDENTIALS;
+        authCredentials = SEARCH_CREDENTIALS;
+      }
+      authCredentials = ALL_CREDENTIALS;
+    } else {
+      authCredentials = null;
+    }
+    return Optional.fromNullable(authCredentials);
   }
   
   protected String buildUrl(int port) {

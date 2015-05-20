@@ -18,6 +18,7 @@
 package org.apache.solr.client.solrj.embedded;
 
 import com.google.common.base.Strings;
+
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -40,6 +41,7 @@ import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.BinaryResponseWriter;
 import org.apache.solr.response.ResultContext;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.servlet.SolrRequestParsers;
 
 import java.io.ByteArrayInputStream;
@@ -115,7 +117,7 @@ public class EmbeddedSolrServer extends SolrClient {
   // It *should* be able to convert the response directly into a named list.
 
   @Override
-  public NamedList<Object> request(SolrRequest request, String coreName) throws SolrServerException, IOException {
+  public NamedList<Object> doRequest(SolrRequest request, String coreName) throws SolrServerException, IOException {
 
     String path = request.getPath();
     if (path == null || !path.startsWith("/")) {
@@ -169,7 +171,7 @@ public class EmbeddedSolrServer extends SolrClient {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "unknown handler: " + path);
       }
 
-      req = _parser.buildRequestFrom(core, params, request.getContentStreams(), request.getAuthCredentials());
+      req = _parser.buildRequestFrom(core, params, request.getContentStreams(), (AuthCredentials)request.getAuthCredentials().orNull());
       req.getContext().put("path", path);
       SolrQueryResponse rsp = new SolrQueryResponse();
       SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));

@@ -236,7 +236,7 @@ public class HttpSolrClient extends SolrClient {
    *      org.apache.solr.client.solrj.ResponseParser)
    */
   @Override
-  public NamedList<Object> request(final SolrRequest request, String collection)
+  public NamedList<Object> doRequest(final SolrRequest request, String collection)
       throws SolrServerException, IOException {
     ResponseParser responseParser = request.getResponseParser();
     if (responseParser == null) {
@@ -245,11 +245,15 @@ public class HttpSolrClient extends SolrClient {
     return request(request, responseParser, collection);
   }
 
-  public NamedList<Object> request(final SolrRequest request, final ResponseParser processor) throws SolrServerException, IOException {
+  // private as a primitive way to avoid request-executions that does not go through the SolrClient.request-methods, which
+  // ensures manipulateRequestBeforeFire(request) has is called
+  private NamedList<Object> request(final SolrRequest request, final ResponseParser processor) throws SolrServerException, IOException {
     return request(request, processor, null);
   }
-  
-  public NamedList<Object> request(final SolrRequest request, final ResponseParser processor, String collection) throws SolrServerException, IOException {
+
+  // private as a primitive way to avoid request-executions that does not go through the SolrClient.request-methods, which
+  // ensures manipulateRequestBeforeFire(request) has is called
+  private NamedList<Object> request(final SolrRequest request, final ResponseParser processor, String collection) throws SolrServerException, IOException {
     HttpContext context = getHttpContextForRequest(request);
     return executeMethod(createMethod(request, collection, context),processor,context);
   }
@@ -278,6 +282,7 @@ public class HttpSolrClient extends SolrClient {
    * @lucene.experimental
    */
   public HttpUriRequestResponse httpUriRequest(final SolrRequest request, final ResponseParser processor) throws SolrServerException, IOException {
+    manipulateRequestBeforeFire(request);
     final HttpContext context = getHttpContextForRequest(request);
     HttpUriRequestResponse mrr = new HttpUriRequestResponse();
     final HttpRequestBase method = createMethod(request, null, context);
@@ -470,6 +475,11 @@ public class HttpSolrClient extends SolrClient {
     boolean success = false;
     try {
       // Execute the method.
+      try {
+        throw new Exception("***** executing URI: " + method.getURI().toString() + ", context: " + context);
+      } catch (Exception e) {
+        e.printStackTrace(System.out);
+      }
       final HttpResponse response = (context != null)?httpClient.execute(method, context):httpClient.execute(method);
       int httpStatus = response.getStatusLine().getStatusCode();
       
@@ -576,12 +586,11 @@ public class HttpSolrClient extends SolrClient {
     }
   }
   
-  protected AuthCredentials getAuthCredentials(SolrRequest request) {
-    return request.getAuthCredentials();
-  }
-  
   public HttpContext getHttpContextForRequest(SolrRequest request) {
-    return getHttpContext(getAuthCredentials(request), request.getPreemptiveAuthentication(), getBaseURL());
+    return getHttpContext(
+        (request.getAuthCredentials() == null)?null:(AuthCredentials)request.getAuthCredentials().orNull(), 
+        request.getPreemptiveAuthentication(), 
+        getBaseURL());
   }
   
   public static HttpContext getHttpContext(AuthCredentials authCredentials, boolean preemptiveAuthentication, String baseURL) {

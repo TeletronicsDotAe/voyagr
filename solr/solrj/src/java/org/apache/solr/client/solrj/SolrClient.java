@@ -36,6 +36,8 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.security.AuthCredentials;
 
+import com.google.common.base.Optional;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.Serializable;
@@ -102,10 +104,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since Solr 5.1
    */
   public UpdateResponse add(String collection, Collection<SolrInputDocument> docs, int commitWithinMs) throws SolrServerException, IOException {
-    return add(collection, docs, commitWithinMs, null);
+    return add(collection, docs, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse add(String collection, Collection<SolrInputDocument> docs, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return add(collection, docs, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse add(String collection, Collection<SolrInputDocument> docs, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.add(docs);
     req.setCommitWithin(commitWithinMs);
@@ -174,10 +180,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since solr 5.1
    */
   public UpdateResponse add(String collection, SolrInputDocument doc, int commitWithinMs) throws SolrServerException, IOException {
-    return add(collection, doc, commitWithinMs, null);
+    return add(collection, doc, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse add(String collection, SolrInputDocument doc, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return add(collection, doc, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse add(String collection, SolrInputDocument doc, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.add(doc);
     req.setCommitWithin(commitWithinMs);
@@ -199,10 +209,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since solr 3.5
    */
   public UpdateResponse add(SolrInputDocument doc, int commitWithinMs) throws SolrServerException, IOException {
-    return add(doc, commitWithinMs, null);
+    return add(doc, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse add(SolrInputDocument doc, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return add(doc, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse add(SolrInputDocument doc, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     return add(null, doc, commitWithinMs, authCredentials);
   }
 
@@ -220,10 +234,15 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public UpdateResponse add(String collection, Iterator<SolrInputDocument> docIterator)
       throws SolrServerException, IOException {
-    return add(collection, docIterator, null);
+    return add(collection, docIterator, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse add(String collection, Iterator<SolrInputDocument> docIterator, AuthCredentials authCredentials)
+      throws SolrServerException, IOException {
+    return add(collection, docIterator, Optional.fromNullable(authCredentials));
+  }  
+  
+  private UpdateResponse add(String collection, Iterator<SolrInputDocument> docIterator, Optional<AuthCredentials> authCredentials)
       throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.setDocIterator(docIterator);
@@ -296,10 +315,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public UpdateResponse addBean(String collection, Object obj, int commitWithinMs) throws IOException, SolrServerException {
-    return addBean(collection, obj, commitWithinMs, null);
+    return addBean(collection, obj, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse addBean(String collection, Object obj, int commitWithinMs, AuthCredentials authCredentials) throws IOException, SolrServerException {
+    return addBean(collection, obj, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse addBean(String collection, Object obj, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws IOException, SolrServerException {
     return add(collection, getBinder().toSolrInputDocument(obj), commitWithinMs, authCredentials);
   }
 
@@ -317,10 +340,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public UpdateResponse addBean(Object obj, int commitWithinMs) throws IOException, SolrServerException {
-    return addBean(obj, commitWithinMs, null);
+    return addBean(obj, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse addBean(Object obj, int commitWithinMs, AuthCredentials authCredentials) throws IOException, SolrServerException {
+    return addBean(obj, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse addBean(Object obj, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws IOException, SolrServerException {
     return add(null, getBinder().toSolrInputDocument(obj), commitWithinMs, authCredentials);
   }
 
@@ -379,10 +406,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since solr 5.1
    */
   public UpdateResponse addBeans(String collection, Collection<?> beans, int commitWithinMs) throws SolrServerException, IOException {
-    return addBeans(collection, beans, commitWithinMs, null);
+    return addBeans(collection, beans, commitWithinMs, (Optional<AuthCredentials>)null);
+  }
+  
+  public UpdateResponse addBeans(String collection, Collection<?> beans, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return addBeans(collection, beans, commitWithinMs, Optional.fromNullable(authCredentials));
   }
     
-  public UpdateResponse addBeans(String collection, Collection<?> beans, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {  
+  private UpdateResponse addBeans(String collection, Collection<?> beans, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {  
     DocumentObjectBinder binder = this.getBinder();
     ArrayList<SolrInputDocument> docs =  new ArrayList<>(beans.size());
     for (Object bean : beans) {
@@ -427,10 +458,15 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public UpdateResponse addBeans(String collection, final Iterator<?> beanIterator)
       throws SolrServerException, IOException {
-    return addBeans(collection, beanIterator, null);
+    return addBeans(collection, beanIterator, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse addBeans(String collection, final Iterator<?> beanIterator, AuthCredentials authCredentials)
+      throws SolrServerException, IOException {
+    return addBeans(collection, beanIterator, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse addBeans(String collection, final Iterator<?> beanIterator, Optional<AuthCredentials> authCredentials)
       throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.setDocIterator(new Iterator<SolrInputDocument>() {
@@ -500,10 +536,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public UpdateResponse commit() throws SolrServerException, IOException {
-    return commit((AuthCredentials)null);
+    return commit((Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse commit(AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return commit(Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse commit(Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     return commit(null, true, true, authCredentials);
   }
 
@@ -523,10 +563,15 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher)
       throws SolrServerException, IOException {
-    return commit(collection, waitFlush, waitSearcher, null);
+    return commit(collection, waitFlush, waitSearcher, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, AuthCredentials authCredentials)
+      throws SolrServerException, IOException {
+    return commit(collection, waitFlush, waitSearcher, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, Optional<AuthCredentials> authCredentials)
       throws SolrServerException, IOException {
     UpdateRequest req = (UpdateRequest)new UpdateRequest()
         .setAction(UpdateRequest.ACTION.COMMIT, waitFlush, waitSearcher);
@@ -569,10 +614,15 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, boolean softCommit)
       throws SolrServerException, IOException {
-    return commit(collection, waitFlush, waitSearcher, softCommit, null);
+    return commit(collection, waitFlush, waitSearcher, softCommit, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, boolean softCommit, AuthCredentials authCredentials)
+      throws SolrServerException, IOException {
+    return commit(collection, waitFlush, waitSearcher, softCommit, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, boolean softCommit, Optional<AuthCredentials> authCredentials)
       throws SolrServerException, IOException {
     UpdateRequest req = (UpdateRequest)new UpdateRequest()
         .setAction(UpdateRequest.ACTION.COMMIT, waitFlush, waitSearcher, softCommit);
@@ -694,11 +744,16 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public UpdateResponse optimize(String collection, boolean waitFlush, boolean waitSearcher, int maxSegments)
       throws SolrServerException, IOException {
-    return optimize(collection, waitFlush, waitSearcher, maxSegments, null);
+    return optimize(collection, waitFlush, waitSearcher, maxSegments, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse optimize(String collection, boolean waitFlush, boolean waitSearcher, int maxSegments, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
+    return optimize(collection, waitFlush, waitSearcher, maxSegments, Optional.fromNullable(authCredentials));
+  }
+    
+  private UpdateResponse optimize(String collection, boolean waitFlush, boolean waitSearcher, int maxSegments, Optional<AuthCredentials> authCredentials)
+      throws SolrServerException, IOException {  
     UpdateRequest req = (UpdateRequest)new UpdateRequest()
         .setAction(UpdateRequest.ACTION.OPTIMIZE, waitFlush, waitSearcher, maxSegments);
     req.setAuthCredentials(authCredentials);
@@ -742,10 +797,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public UpdateResponse rollback(String collection) throws SolrServerException, IOException {
-    return rollback(collection, null);
+    return rollback(collection, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse rollback(String collection, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return rollback(collection, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse rollback(String collection, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     UpdateRequest req = (UpdateRequest)new UpdateRequest().rollback();
     req.setAuthCredentials(authCredentials);
     return req.process(this, collection);
@@ -815,10 +874,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since 5.1
    */
   public UpdateResponse deleteById(String collection, String id, int commitWithinMs) throws SolrServerException, IOException {
-    return deleteById(collection, id, commitWithinMs, null);
+    return deleteById(collection, id, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse deleteById(String collection, String id, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return deleteById(collection, id, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse deleteById(String collection, String id, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.deleteById(id);
     req.setCommitWithin(commitWithinMs);
@@ -891,10 +954,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since 5.1
    */
   public UpdateResponse deleteById(String collection, List<String> ids, int commitWithinMs) throws SolrServerException, IOException {
-    return deleteById(collection, ids, commitWithinMs, null);
+    return deleteById(collection, ids, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse deleteById(String collection, List<String> ids, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return deleteById(collection, ids, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse deleteById(String collection, List<String> ids, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.deleteById(ids);
     req.setCommitWithin(commitWithinMs);
@@ -967,10 +1034,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since 5.1
    */
   public UpdateResponse deleteByQuery(String collection, String query, int commitWithinMs) throws SolrServerException, IOException {
-    return deleteByQuery(collection, query, commitWithinMs, null);
+    return deleteByQuery(collection, query, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse deleteByQuery(String collection, String query, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return deleteByQuery(collection, query, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse deleteByQuery(String collection, String query, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     UpdateRequest req = new UpdateRequest();
     req.deleteByQuery(query);
     req.setCommitWithin(commitWithinMs);
@@ -993,10 +1064,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @since 3.6
    */
   public UpdateResponse deleteByQuery(String query, int commitWithinMs) throws SolrServerException, IOException {
-    return deleteByQuery(query, commitWithinMs, null);
+    return deleteByQuery(query, commitWithinMs, (Optional<AuthCredentials>)null);
   }
   
   public UpdateResponse deleteByQuery(String query, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return deleteByQuery(query, commitWithinMs, Optional.fromNullable(authCredentials));
+  }
+  
+  private UpdateResponse deleteByQuery(String query, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     return deleteByQuery(null, query, commitWithinMs, authCredentials);
   }
 
@@ -1010,10 +1085,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public SolrPingResponse ping() throws SolrServerException, IOException {
-    return ping(null);
+    return ping((Optional<AuthCredentials>)null);
   }
   
   public SolrPingResponse ping(AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return ping(Optional.fromNullable(authCredentials));
+  }
+  
+  private SolrPingResponse ping(Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     SolrPing req = new SolrPing();
     req.setAuthCredentials(authCredentials);
     return req.process(this, null);
@@ -1032,10 +1111,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public QueryResponse query(String collection, SolrParams params) throws SolrServerException, IOException {
-    return query(collection, params, (AuthCredentials)null);
+    return query(collection, params, (Optional<AuthCredentials>)null);
   }
   
   public QueryResponse query(String collection, SolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return query(collection, params, Optional.fromNullable(authCredentials));
+  }
+  
+  private QueryResponse query(String collection, SolrParams params, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     QueryRequest req = new QueryRequest(params);
     req.setAuthCredentials(authCredentials);
     return req.process(this, collection);
@@ -1053,10 +1136,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public QueryResponse query(SolrParams params) throws SolrServerException, IOException {
-    return query(params, (AuthCredentials)null);
+    return query(params, (Optional<AuthCredentials>)null);
+  }
+  
+  public QueryResponse query(SolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return query(params, Optional.fromNullable(authCredentials));
   }
    
-  public QueryResponse query(SolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
+  private QueryResponse query(SolrParams params, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     return query(null, params, authCredentials);
   }
 
@@ -1074,10 +1161,14 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws SolrServerException if there is an error on the server
    */
   public QueryResponse query(String collection, SolrParams params, METHOD method) throws SolrServerException, IOException {
-    return query(collection, params, method, null);
+    return query(collection, params, method, (Optional<AuthCredentials>)null);
   }
   
   public QueryResponse query(String collection, SolrParams params, METHOD method, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return query(collection, params, method, Optional.fromNullable(authCredentials));
+  }
+  
+  private QueryResponse query(String collection, SolrParams params, METHOD method, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     QueryRequest req = new QueryRequest(params, method);
     req.setAuthCredentials(authCredentials);
     return req.process(this, collection);
@@ -1122,10 +1213,15 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public QueryResponse queryAndStreamResponse(String collection, SolrParams params, StreamingResponseCallback callback)
       throws SolrServerException, IOException {
-    return queryAndStreamResponse(collection, params, callback, null);
+    return queryAndStreamResponse(collection, params, callback, (Optional<AuthCredentials>)null);
   }
   
   public QueryResponse queryAndStreamResponse(String collection, SolrParams params, StreamingResponseCallback callback, AuthCredentials authCredentials)
+      throws SolrServerException, IOException {
+    return queryAndStreamResponse(collection, params, callback, Optional.fromNullable(authCredentials));
+  }
+  
+  private QueryResponse queryAndStreamResponse(String collection, SolrParams params, StreamingResponseCallback callback, Optional<AuthCredentials> authCredentials)
       throws SolrServerException, IOException {
     ResponseParser parser = new StreamingBinaryResponseParser(callback);
     QueryRequest req = new QueryRequest(params);
@@ -1275,10 +1371,15 @@ public abstract class SolrClient implements Serializable, Closeable {
    */
   public SolrDocumentList getById(String collection, Collection<String> ids, SolrParams params)
       throws SolrServerException, IOException {
-    return getById(collection, ids, params, null);
+    return getById(collection, ids, params, (Optional<AuthCredentials>)null);
   }
   
   public SolrDocumentList getById(String collection, Collection<String> ids, SolrParams params, AuthCredentials authCredentials)
+      throws SolrServerException, IOException {
+    return getById(collection, ids, params, Optional.fromNullable(authCredentials));
+  }
+  
+  private SolrDocumentList getById(String collection, Collection<String> ids, SolrParams params, Optional<AuthCredentials> authCredentials)
       throws SolrServerException, IOException {
     if (ids == null || ids.isEmpty()) {
       throw new IllegalArgumentException("Must provide an identifier of a document to retrieve.");
@@ -1322,7 +1423,23 @@ public abstract class SolrClient implements Serializable, Closeable {
    * @throws IOException If there is a low-level I/O error.
    * @throws SolrServerException if there is an error on the server
    */
-  public abstract NamedList<Object> request(final SolrRequest request, String collection)
+  public final NamedList<Object> request(final SolrRequest request, String collection)
+      throws SolrServerException, IOException {
+    manipulateRequestBeforeFire(request);
+    return doRequest(request, collection);
+  }
+  
+  public void manipulateRequestBeforeFire(final SolrRequest request) {
+    // Making sure optional request.getAuthCredentials is not null - either present or absent
+    if (request.getAuthCredentials() == null) request.setAuthCredentials(getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(request));
+  }
+  
+  protected Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(final SolrRequest request) {
+    return null;
+  }
+
+  
+  public abstract NamedList<Object> doRequest(final SolrRequest request, String collection)
       throws SolrServerException, IOException;
 
   /**

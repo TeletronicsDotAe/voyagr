@@ -38,8 +38,11 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.http.client.HttpClient;
 import org.apache.http.params.CoreConnectionPNames;
 import org.apache.lucene.util.LuceneTestCase.Slow;
+import org.apache.solr.BaseDistributedSearchTestCase;
+import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -82,6 +85,8 @@ import org.noggit.CharArr;
 import org.noggit.JSONWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Optional;
 
 import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
@@ -252,7 +257,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
   }
   
   protected CloudSolrClient createCloudClient(String defaultCollection) {
-    CloudSolrClient client = new CloudSolrClient(zkServer.getZkAddress(), random().nextBoolean());
+    CloudSolrClient client = createCloudSolrClientBase(zkServer.getZkAddress(), random().nextBoolean());
     client.setParallelUpdates(random().nextBoolean());
     if (defaultCollection != null) client.setDefaultCollection(defaultCollection);
     client.getLbClient().getHttpClient().getParams()
@@ -261,6 +266,33 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
     .setParameter(CoreConnectionPNames.SO_TIMEOUT, 60000);
     return client;
   }
+  
+  protected final CloudSolrClient createCloudSolrClientBase(String zkHost, boolean updatesToLeaders) {
+    return new AutoCredentialsCloudSolrClient(zkHost, updatesToLeaders);
+  }
+
+  
+  protected class AutoCredentialsCloudSolrClient extends CloudSolrClient {
+    
+    public AutoCredentialsCloudSolrClient(String zkHost)  {
+      super(zkHost);
+    }
+    
+    public AutoCredentialsCloudSolrClient(String zkHost, HttpClient httpClient)  {
+      super(zkHost, httpClient);
+    }
+    
+    public AutoCredentialsCloudSolrClient(String zkHost, boolean updatesToLeaders) {
+      super(zkHost, updatesToLeaders);
+    }
+    
+    @Override
+    protected Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+      return BaseDistributedSearchTestCase.getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(request);
+    }
+
+  }
+
 
   @Override
   protected void createServers(int numServers) throws Exception {
@@ -1771,7 +1803,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
   protected CloudSolrClient getCommonCloudSolrClient() {
     synchronized (this) {
       if (commondCloudSolrClient == null) {
-        commondCloudSolrClient = new CloudSolrClient(zkServer.getZkAddress(),
+        commondCloudSolrClient = createCloudSolrClientBase(zkServer.getZkAddress(),
             random().nextBoolean());
         commondCloudSolrClient.getLbClient().setConnectionTimeout(30000);
         commondCloudSolrClient.setParallelUpdates(random().nextBoolean());

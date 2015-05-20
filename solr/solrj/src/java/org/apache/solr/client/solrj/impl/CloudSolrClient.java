@@ -720,8 +720,10 @@ public class CloudSolrClient extends SolrClient {
       }
       minRf = (Integer)header.get(UpdateRequest.MIN_REPFACT);
       List<String> handledPartsRef = SolrResponse.getHandledPartsRef(shardResponse);
-      for (String handledPartRef : handledPartsRef) {
-        SolrResponse.addHandledPart(condensed, handledPartRef);
+      if (handledPartsRef != null) {
+        for (String handledPartRef : handledPartsRef) {
+          SolrResponse.addHandledPart(condensed, handledPartRef);
+        }
       }
     }
 
@@ -827,7 +829,7 @@ public class CloudSolrClient extends SolrClient {
   }
 
   @Override
-  public NamedList<Object> request(SolrRequest request, String collection) throws SolrServerException, IOException {
+  public NamedList<Object> doRequest(SolrRequest request, String collection) throws SolrServerException, IOException {
     SolrParams reqParams = request.getParams();
 
     if (collection == null)
