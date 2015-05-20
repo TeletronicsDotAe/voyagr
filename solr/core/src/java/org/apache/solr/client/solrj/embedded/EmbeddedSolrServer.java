@@ -173,6 +173,7 @@ public class EmbeddedSolrServer extends SolrClient {
       req.getContext().put("path", path);
       SolrQueryResponse rsp = new SolrQueryResponse();
       SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
+      try {
 
       core.execute(handler, req, rsp);
       checkForExceptions(rsp);
@@ -232,13 +233,15 @@ public class EmbeddedSolrServer extends SolrClient {
       // Now write it out
       NamedList<Object> normalized = BinaryResponseWriter.getParsedResponse(req, rsp);
       return normalized;
+      } finally {
+        SolrRequestInfo.clearRequestInfo();
+      }
     } catch (IOException | SolrException iox) {
       throw iox;
     } catch (Exception ex) {
       throw new SolrServerException(ex);
     } finally {
       if (req != null) req.close();
-      SolrRequestInfo.clearRequestInfo();
     }
   }
 

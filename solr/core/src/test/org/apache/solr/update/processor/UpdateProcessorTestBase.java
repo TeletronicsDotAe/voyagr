@@ -71,9 +71,13 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
       cmd.solrDoc = docIn;
 
       UpdateRequestProcessor processor = pc.createProcessor(req, rsp);
+      try {
       if (null != processor) {
         // test chain might be empty or short circuted.
         processor.processAdd(cmd);
+      }
+      } finally {
+        processor.finish();
       }
 
       return cmd.solrDoc;
@@ -98,6 +102,7 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
       processor.processCommit(cmd);
     } finally {
       req.close();
+      processor.finish();
     }
   }
 
@@ -117,6 +122,7 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
       processor.processDelete(cmd);
     } finally {
       req.close();
+      processor.finish();
     }
   }
 

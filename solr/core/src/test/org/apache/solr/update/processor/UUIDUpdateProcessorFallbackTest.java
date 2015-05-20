@@ -144,7 +144,11 @@ public class UUIDUpdateProcessorFallbackTest extends SolrTestCaseJ4 {
       cmd.solrDoc = docIn;
 
       UpdateRequestProcessor processor = pc.createProcessor(req, rsp);
+      try {
       processor.processAdd(cmd);
+      } finally {
+        processor.finish();
+      }
 
       return cmd.solrDoc;
     } finally {

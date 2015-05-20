@@ -85,13 +85,18 @@ public class UpdateRequestProcessorFactoryTest extends AbstractSolrTestCase {
 
       // Custom comes first in all three of our chains
       proc = chain.createProcessor(req(), new SolrQueryResponse());
+      try {
       assertTrue(name + " first processor isn't a CustomUpdateRequestProcessor: " 
                  + proc.getClass().getName(),
                  proc instanceof CustomUpdateRequestProcessor);
+      } finally {
+        proc.finish();
+      }
 
       // varies depending on chain, but definitely shouldn't be Custom
       proc = chain.createProcessor(req(DISTRIB_UPDATE_PARAM, "non_blank_value"),
                                    new SolrQueryResponse());
+      try {
       assertFalse(name + " post distrib proc should not be a CustomUpdateRequestProcessor: " 
                  + proc.getClass().getName(),
                  proc instanceof CustomUpdateRequestProcessor);
@@ -109,6 +114,9 @@ public class UpdateRequestProcessorFactoryTest extends AbstractSolrTestCase {
 
       assertTrue( n < chain.getFactories().length );   // some processors should have been dropped
       assertTrue( foundLog );  // make sure the marker interface was successful in keeping the log processor
+      } finally {
+        proc.finish();
+      }
 
     }
 

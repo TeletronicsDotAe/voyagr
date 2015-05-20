@@ -85,6 +85,7 @@ public class TestSearchPerf extends AbstractSolrTestCase {
     SolrQueryResponse rsp = reqInfo.getRsp();
     UpdateRequestProcessorChain processorChain = req.getCore().getUpdateProcessingChain(null);
     UpdateRequestProcessor processor = processorChain.createProcessor(req, rsp);
+    try {
 
     boolean foomany_s = fieldSet.contains("foomany_s");
     boolean foo1_s = fieldSet.contains("foo1_s");
@@ -125,7 +126,9 @@ public class TestSearchPerf extends AbstractSolrTestCase {
       cmd.solrDoc = doc;
       processor.processAdd(cmd);
     }
-    processor.finish();
+    } finally { 
+      processor.finish();
+    }
     req.close();
 
     assertU(commit());

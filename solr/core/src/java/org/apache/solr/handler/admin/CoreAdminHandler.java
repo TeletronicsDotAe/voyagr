@@ -462,7 +462,11 @@ public class CoreAdminHandler extends RequestHandlerBase {
         ((LocalSolrQueryRequest)wrappedReq).setAuthCredentials(req.getAuthCredentials());
         UpdateRequestProcessor processor =
                 processorChain.createProcessor(wrappedReq, rsp);
+        try {
         processor.processMergeIndexes(new MergeIndexesCommand(readers, req));
+        } finally {
+          processor.finish();
+        }
       } catch (Exception e) {
         // log and rethrow so that if the finally fails we don't lose the original problem
         log.error("ERROR executing merge:", e);
