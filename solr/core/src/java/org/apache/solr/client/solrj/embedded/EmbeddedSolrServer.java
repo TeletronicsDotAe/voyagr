@@ -171,7 +171,8 @@ public class EmbeddedSolrServer extends SolrClient {
         throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "unknown handler: " + path);
       }
 
-      req = _parser.buildRequestFrom(core, params, request.getContentStreams(), (AuthCredentials)request.getAuthCredentials().orElse(null));
+      req = _parser.buildRequestFrom(core, params, request.getContentStreams(), 
+          (request.getAuthCredentials() != null)?(AuthCredentials)request.getAuthCredentials().orElse(null):null);
       req.getContext().put("path", path);
       SolrQueryResponse rsp = new SolrQueryResponse();
       SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
