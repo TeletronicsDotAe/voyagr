@@ -48,6 +48,8 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.schema.TrieDateField;
 import org.apache.solr.security.AuthCredentials;
+import org.apache.solr.servlet.security.RegExpAuthorizationFilter;
+import org.apache.solr.servlet.security.RegExpAuthorizationFilter.RegExpPatternAndRoles;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -496,21 +498,24 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
 
   }
   
+  private static List<RegExpPatternAndRoles> authorizationConstraints = RegExpAuthorizationFilter.getAuthorizationConstraints(JettySolrRunner.commonSecurityConfig);
   protected static Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
-    // TODO better implementation needed - does not handle added SolrRequest-types
-    AuthCredentials authCredentials;
     if (RUN_WITH_COMMON_SECURITY) {
-      if (request instanceof AbstractUpdateRequest) authCredentials = UPDATE_CREDENTIALS;
-      else if (request instanceof DirectXmlRequest) authCredentials = UPDATE_CREDENTIALS;
-      else if (request instanceof QueryRequest) {
-        if (request.getPath() != null && request.getPath().startsWith("/admin")) authCredentials = ALL_CREDENTIALS;
-        authCredentials = SEARCH_CREDENTIALS;
+      List<String> firstMatchingConstraintsRoles = RegExpAuthorizationFilter.getMatchingRoles(authorizationConstraints, request.getPath());
+      String roleToMatch = (firstMatchingConstraintsRoles.size() > 0)?firstMatchingConstraintsRoles.get(0):null;
+      if (roleToMatch == null) return Optional.ofNullable(null);
+      
+      for (UsernamePasswordRoles usernamePasswordRoles : JettySolrRunner.usernamePasswordRolesList) {
+        for (String userRole : usernamePasswordRoles.roles) {
+          if (roleToMatch.equals(userRole)) {
+            AuthCredentials authCredentials = JettySolrRunner.usernameToAuthCredentialsMap.get(usernamePasswordRoles.username);
+            log.debug("Auto-credentials: Using credentials " + authCredentials.toString() + " for path " + request.getPath());
+            return Optional.of(authCredentials);
+          }
+        }
       }
-      authCredentials = ALL_CREDENTIALS;
-    } else {
-      authCredentials = null;
     }
-    return Optional.ofNullable(authCredentials);
+    return Optional.ofNullable(null);
   }
   
   protected String buildUrl(int port) {

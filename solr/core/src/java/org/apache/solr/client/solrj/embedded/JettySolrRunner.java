@@ -46,14 +46,17 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Properties;
 import java.util.List;
 import java.util.Random;
@@ -99,6 +102,43 @@ public class JettySolrRunner {
   public static final String ALL_PASSWORD = "all-pass";
   public static final String ALL_ROLE = "all-role";
   public static final AuthCredentials ALL_CREDENTIALS = AuthCredentials.createBasicAuthCredentials(ALL_USERNAME, ALL_PASSWORD);
+  
+  public static Map<String, AuthCredentials> usernameToAuthCredentialsMap = new HashMap<String, AuthCredentials>();
+  static {
+    usernameToAuthCredentialsMap.put(SEARCH_USERNAME, SEARCH_CREDENTIALS);
+    usernameToAuthCredentialsMap.put(UPDATE_USERNAME, UPDATE_CREDENTIALS);
+    usernameToAuthCredentialsMap.put(ALL_USERNAME, ALL_CREDENTIALS);
+  }
+  
+  public static class UsernamePasswordRoles {
+    
+    public String username;
+    public String password;
+    public String[] roles;
+    
+    public UsernamePasswordRoles(String username, String password, String[] roles) {
+      this.username = username;
+      this.password = password;
+      this.roles = roles;
+    }
+    
+  }
+  public static final List<UsernamePasswordRoles> usernamePasswordRolesList = new ArrayList<UsernamePasswordRoles>();
+  static {
+    usernamePasswordRolesList.add(new UsernamePasswordRoles(SEARCH_USERNAME, SEARCH_PASSWORD, new String[]{SEARCH_ROLE}));
+    usernamePasswordRolesList.add(new UsernamePasswordRoles(UPDATE_USERNAME, UPDATE_PASSWORD, new String[]{UPDATE_ROLE}));
+    usernamePasswordRolesList.add(new UsernamePasswordRoles(ALL_USERNAME, ALL_PASSWORD, new String[]{ALL_ROLE}));
+  }
+  
+  public static final Map<String, String> commonSecurityConfig = new HashMap<String, String>();
+  static {
+    commonSecurityConfig.put("update-constraint", "1|" + UPDATE_ROLE + "," + ALL_ROLE + "|^.*/update$");
+    commonSecurityConfig.put("search-constraint", "2|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/select$");
+    commonSecurityConfig.put("terms-constraint", "3|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/terms$");
+    commonSecurityConfig.put("get-constraint", "4|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/get$");
+    commonSecurityConfig.put("stream-constraint", "5|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/stream$");
+    commonSecurityConfig.put("all-constraint", "6|" + ALL_ROLE + "|^.*$");
+  }
 
   Server server;
 
@@ -444,10 +484,9 @@ public class JettySolrRunner {
   
         @Override
         protected void loadUsers() throws IOException {
-          // For test purpose just a hard coded set of user/password/roles
-          putUser(SEARCH_USERNAME, new Password(SEARCH_PASSWORD), new String[]{SEARCH_ROLE});
-          putUser(UPDATE_USERNAME, new Password(UPDATE_PASSWORD), new String[]{UPDATE_ROLE});
-          putUser(ALL_USERNAME, new Password(ALL_PASSWORD), new String[]{ALL_ROLE});
+          for (UsernamePasswordRoles usernamePasswordRoles : usernamePasswordRolesList) {
+            putUser(usernamePasswordRoles.username, new Password(usernamePasswordRoles.password), usernamePasswordRoles.roles);
+          }
         }
       };
       server.addBean(loginService); 
@@ -533,12 +572,9 @@ public class JettySolrRunner {
           //          <url-pattern>/*</url-pattern>
           //        </filter-mapping>
           regExpSecurityFilterHolder = new FilterHolder(new RegExpAuthorizationFilter()); 
-          regExpSecurityFilterHolder.setInitParameter("update-constraint", "1|" + UPDATE_ROLE + "," + ALL_ROLE + "|^.*/update$");
-          regExpSecurityFilterHolder.setInitParameter("search-constraint", "2|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/select$");
-          regExpSecurityFilterHolder.setInitParameter("terms-constraint", "3|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/terms$");
-          regExpSecurityFilterHolder.setInitParameter("get-constraint", "4|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/get$");
-          regExpSecurityFilterHolder.setInitParameter("stream-constraint", "5|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/stream$");
-          regExpSecurityFilterHolder.setInitParameter("all-constraint", "6|" + ALL_ROLE + "|^.*$");
+          for (Map.Entry<String, String> entry : commonSecurityConfig.entrySet()) {
+            regExpSecurityFilterHolder.setInitParameter(entry.getKey(), entry.getValue());
+          }
           root.addFilter(regExpSecurityFilterHolder, "*", EnumSet.of(DispatcherType.REQUEST));
         }
         

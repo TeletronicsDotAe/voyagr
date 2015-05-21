@@ -44,13 +44,13 @@ import org.slf4j.LoggerFactory;
 
 public class RegExpAuthorizationFilter implements Filter {
   
-  final Logger log = LoggerFactory.getLogger(RegExpAuthorizationFilter.class);
+  final static Logger log = LoggerFactory.getLogger(RegExpAuthorizationFilter.class);
 
-  private class RegExpPatternAndRoles {
-    private int order;
-    private String name;
-    private Pattern regExpPattern;
-    private String[] roles;
+  public static class RegExpPatternAndRoles {
+    public int order;
+    public String name;
+    public Pattern regExpPattern;
+    public String[] roles;
   }
   private List<RegExpPatternAndRoles> authorizationConstraints;
   
@@ -59,11 +59,21 @@ public class RegExpAuthorizationFilter implements Filter {
 
   @Override
   public void init(FilterConfig config) throws ServletException {
-    authorizationConstraints = new ArrayList<RegExpPatternAndRoles>();
+    Map<String, String> initParamsMap = new HashMap<String, String>();
     Enumeration<String> initParamNames = config.getInitParameterNames();
     while (initParamNames.hasMoreElements()) {
       String name = initParamNames.nextElement();
       String value = config.getInitParameter(name);
+      initParamsMap.put(name, value);
+    }
+    authorizationConstraints = getAuthorizationConstraints(initParamsMap);
+  }
+  
+  public static List<RegExpPatternAndRoles> getAuthorizationConstraints(Map<String, String> keyValueMap) {
+    List<RegExpPatternAndRoles> authorizationConstraints = new ArrayList<RegExpPatternAndRoles>();
+    for (Map.Entry<String, String> keyValue : keyValueMap.entrySet()) {
+      String name = keyValue.getKey();
+      String value = keyValue.getValue();
       int orderRolesSplit = value.indexOf("|");
       int rolesPatternSplit = value.indexOf("|", orderRolesSplit+1);
       // Do not use StringUtils.split here because pattern might contain | (roles are not allowed to for this filter to work)
@@ -83,6 +93,7 @@ public class RegExpAuthorizationFilter implements Filter {
         return a.order - b.order;
       }
     });
+    return authorizationConstraints;
   }
 
   @Override
@@ -90,33 +101,52 @@ public class RegExpAuthorizationFilter implements Filter {
       FilterChain chain) throws IOException, ServletException {
     if (req instanceof HttpServletRequest) {
       HttpServletRequest httpReq = (HttpServletRequest)req;
-      outherLoop: for (RegExpPatternAndRoles regExpPatternAndRoles : authorizationConstraints) {
-        // httpReq.getServletPath() seems to work on a "real" jetty in production setup - httpReq.getPathInfo() doesnt
-        String servletPath = httpReq.getServletPath();
-        // httpReq.getPathInfo() seems to work on a "test" jetty set up by JettySolrRunner - httpReq.getServletPath() doesnt
-        if (StringUtils.isEmpty(servletPath)) servletPath = httpReq.getPathInfo();
-        log.debug("Pattern matching on servlet-path: " + servletPath);
-        Matcher matcher = regExpPatternAndRoles.regExpPattern.matcher(servletPath);
-        if (matcher.find()) {
-          for (int i = 0; i < regExpPatternAndRoles.roles.length; i++) {
-            if (httpReq.isUserInRole(regExpPatternAndRoles.roles[i])) {
-              break outherLoop;
-            }
-          }
-          // It is by intent that we do not check the remaining constraints as soon as we have had a match on the URL-pattern but not on authorization
-          // because that is the way security-constraints in deployment descriptors (web.xml) works, and guess its nice to have similar behavior
-          Principal principal = httpReq.getUserPrincipal();
-          log.warn(((principal != null)?principal.getName():"Unauthenticated user") + " tried to access unauthorized resource " + httpReq.getPathInfo());
-          ((HttpServletResponse)resp).sendError(403, "Unauthorized");
-          return;
+      String servletPath = httpReq.getServletPath();
+      // httpReq.getPathInfo() seems to work on a "test" jetty set up by JettySolrRunner - httpReq.getServletPath() doesnt
+      if (StringUtils.isEmpty(servletPath)) servletPath = httpReq.getPathInfo();
+      
+      List<String> firstMatchingConstraintsRoles = getMatchingRoles(authorizationConstraints, servletPath);
+      boolean ok = false;
+      for (int i = 0; i < firstMatchingConstraintsRoles.size(); i++) {
+        if (httpReq.isUserInRole(firstMatchingConstraintsRoles.get(i))) {
+          ok = true;
+          break;
         }
+      }
+      
+      if (!ok) {
+        Principal principal = httpReq.getUserPrincipal();
+        log.debug(((principal != null)?principal.getName():"Unauthenticated user") + " tried to access unauthorized resource " + servletPath);
+        ((HttpServletResponse)resp).sendError(403, "Unauthorized");
+        return;
       }
     }
     
     chain.doFilter(req, resp);
   }
   
-  private String printRoles(String[] roles) {
+  public static List<String> getMatchingRoles(List<RegExpPatternAndRoles> authorizationConstraints, String path) {
+    List<String> result = new ArrayList<String>();
+    outerLoop: for (RegExpPatternAndRoles regExpPatternAndRoles : authorizationConstraints) {
+      Matcher matcher = regExpPatternAndRoles.regExpPattern.matcher(path);
+      if (matcher.find()) {
+        for (int i = 0; i < regExpPatternAndRoles.roles.length; i++) {
+          result.add(regExpPatternAndRoles.roles[i]);
+        }
+        // It is by intent that we do not return more than the roles from the first matching constraint
+        // because that is the way security-constraints in deployment descriptors (web.xml) works, and guess its nice to have similar behavior
+        break;
+      }
+    }
+    StringBuilder sb = new StringBuilder();
+    for (String role : result) {
+      sb.append(" ").append(role);
+    }
+    log.debug("Roles allowed to access " + path + ":" + sb.toString());
+    return result;
+  }
+  
+  private static String printRoles(String[] roles) {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < roles.length; i++) {
       if (i > 0) sb.append(" ");
