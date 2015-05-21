@@ -32,6 +32,8 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
+
 import org.apache.solr.security.AuthCredentials;
 
 /**
@@ -513,10 +515,15 @@ public class CoreAdminRequest extends SolrRequest<CoreAdminResponse> {
 
   public static CoreAdminResponse reloadCore(String name, SolrClient client) throws SolrServerException, IOException
   {
-    return reloadCore(name, client, null);
+    return reloadCore(name, client, (Optional<AuthCredentials>)null);
   }
   
   public static CoreAdminResponse reloadCore( String name, SolrClient client, AuthCredentials authCredentials ) throws SolrServerException, IOException
+  {
+    return reloadCore(name, client, Optional.ofNullable(authCredentials));
+  }
+  
+  private static CoreAdminResponse reloadCore( String name, SolrClient client, Optional<AuthCredentials> authCredentials ) throws SolrServerException, IOException
   {
     CoreAdminRequest req = new CoreAdminRequest();
     req.setCoreName(name);
@@ -535,10 +542,14 @@ public class CoreAdminRequest extends SolrRequest<CoreAdminResponse> {
   }
 
   public static CoreAdminResponse unloadCore(String name, boolean deleteIndex, boolean deleteInstanceDir, SolrClient client) throws SolrServerException, IOException {
-    return unloadCore(name, deleteIndex, deleteInstanceDir, client, null);
+    return unloadCore(name, deleteIndex, deleteInstanceDir, client, (Optional<AuthCredentials>)null);
   }
   
   public static CoreAdminResponse unloadCore(String name, boolean deleteIndex, boolean deleteInstanceDir, SolrClient client, AuthCredentials authCredentials) throws SolrServerException, IOException {
+    return unloadCore(name, deleteIndex, deleteInstanceDir, client, Optional.ofNullable(authCredentials));
+  }
+  
+  private static CoreAdminResponse unloadCore(String name, boolean deleteIndex, boolean deleteInstanceDir, SolrClient client, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
     Unload req = new Unload(deleteIndex);
     req.setCoreName(name);
     req.setDeleteInstanceDir(deleteInstanceDir);
@@ -548,10 +559,15 @@ public class CoreAdminRequest extends SolrRequest<CoreAdminResponse> {
 
   public static CoreAdminResponse renameCore(String coreName, String newName, SolrClient client ) throws SolrServerException, IOException
   {
-    return renameCore(coreName, newName, client, null);
+    return renameCore(coreName, newName, client, (Optional<AuthCredentials>)null);
   }
 
   public static CoreAdminResponse renameCore(String coreName, String newName, SolrClient client, AuthCredentials authCredentials ) throws SolrServerException, IOException
+  {
+    return renameCore(coreName, newName, client, Optional.ofNullable(authCredentials));
+  }
+    
+  private static CoreAdminResponse renameCore(String coreName, String newName, SolrClient client, Optional<AuthCredentials> authCredentials ) throws SolrServerException, IOException
   {
     CoreAdminRequest req = new CoreAdminRequest();
     req.setCoreName(coreName);
@@ -563,10 +579,15 @@ public class CoreAdminRequest extends SolrRequest<CoreAdminResponse> {
 
   public static CoreAdminResponse getStatus( String name, SolrClient client ) throws SolrServerException, IOException
   {
-    return getStatus(name, client, null);
+    return getStatus(name, client, (Optional<AuthCredentials>)null);
+  }
+  
+  public static CoreAdminResponse getStatus( String name, SolrClient client, AuthCredentials authCredentials ) throws SolrServerException, IOException
+  {
+    return getStatus(name, client, Optional.ofNullable(authCredentials));
   }
 
-  public static CoreAdminResponse getStatus( String name, SolrClient client, AuthCredentials authCredentials ) throws SolrServerException, IOException
+  private static CoreAdminResponse getStatus( String name, SolrClient client, Optional<AuthCredentials> authCredentials ) throws SolrServerException, IOException
   {
     CoreAdminRequest req = new CoreAdminRequest();
     req.setCoreName( name );
@@ -581,10 +602,15 @@ public class CoreAdminRequest extends SolrRequest<CoreAdminResponse> {
   }
   
   public static CoreAdminResponse createCore( String name, String instanceDir, SolrClient client, String configFile, String schemaFile ) throws SolrServerException, IOException {
-    return createCore(name, instanceDir, client, configFile, schemaFile, null, null, null);
+    return createCore(name, instanceDir, client, configFile, schemaFile, null, null, (Optional<AuthCredentials>)null);
   }
   
   public static CoreAdminResponse createCore( String name, String instanceDir, SolrClient client, String configFile, String schemaFile, String dataDir, String tlogDir, AuthCredentials authCredentials ) throws SolrServerException, IOException
+  {
+    return createCore(name, instanceDir, client, configFile, schemaFile, null, null, Optional.ofNullable(authCredentials));
+  }
+  
+  private static CoreAdminResponse createCore( String name, String instanceDir, SolrClient client, String configFile, String schemaFile, String dataDir, String tlogDir, Optional<AuthCredentials> authCredentials ) throws SolrServerException, IOException
   {
     CoreAdminRequest.Create req = new CoreAdminRequest.Create();
     req.setCoreName( name );
@@ -608,11 +634,17 @@ public class CoreAdminRequest extends SolrRequest<CoreAdminResponse> {
   public static CoreAdminResponse mergeIndexes(String name,
       String[] indexDirs, String[] srcCores, SolrClient client) throws SolrServerException,
       IOException {
-    return mergeIndexes(name, indexDirs, srcCores, client, null);
+    return mergeIndexes(name, indexDirs, srcCores, client, (Optional<AuthCredentials>)null);
   }
-
+  
   public static CoreAdminResponse mergeIndexes(String name,
       String[] indexDirs, String[] srcCores, SolrClient client, AuthCredentials authCredentials) throws SolrServerException,
+      IOException {
+    return mergeIndexes(name, indexDirs, srcCores, client, Optional.ofNullable(authCredentials));
+  }
+
+  private static CoreAdminResponse mergeIndexes(String name,
+      String[] indexDirs, String[] srcCores, SolrClient client, Optional<AuthCredentials> authCredentials) throws SolrServerException,
       IOException {
     CoreAdminRequest.MergeIndexes req = new CoreAdminRequest.MergeIndexes();
     req.setCoreName(name);
