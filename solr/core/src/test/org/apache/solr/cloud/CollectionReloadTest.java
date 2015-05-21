@@ -141,7 +141,7 @@ public class CollectionReloadTest extends AbstractFullDistribZkTestBase {
     ZkCoreNodeProps coreProps = new ZkCoreNodeProps(replica);
     String coreName = coreProps.getCoreName();
     boolean reloadedOk = false;
-    try (HttpSolrClient client = new HttpSolrClient(coreProps.getBaseUrl())) {
+    try (HttpSolrClient client = createNewSolrClientBase(coreProps.getBaseUrl())) {
       CoreAdminResponse statusResp = CoreAdminRequest.getStatus(coreName, client, ALL_CREDENTIALS);
       long leaderCoreStartTime = statusResp.getStartTime(coreName).getTime();
 

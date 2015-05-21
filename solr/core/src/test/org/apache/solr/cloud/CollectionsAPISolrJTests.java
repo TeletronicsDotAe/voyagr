@@ -257,7 +257,7 @@ public class CollectionsAPISolrJTests extends AbstractFullDistribZkTestBase {
 
     Replica replica1 = testCollection.getReplica("core_node1");
 
-    try (HttpSolrClient client = new HttpSolrClient(replica1.getStr("base_url"))) {
+    try (HttpSolrClient client = createNewSolrClientBase(replica1.getStr("base_url"))) {
       CoreAdminResponse status = CoreAdminRequest.getStatus(replica1.getStr("core"), client);
       NamedList<Object> coreStatus = status.getCoreStatus(replica1.getStr("core"));
       String dataDirStr = (String) coreStatus.get("dataDir");

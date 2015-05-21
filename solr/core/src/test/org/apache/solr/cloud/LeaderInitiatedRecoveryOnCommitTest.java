@@ -177,7 +177,7 @@ public class LeaderInitiatedRecoveryOnCommitTest extends BasicDistributedZkTest 
     String replicaCoreUrl = replica.getCoreUrl();
     log.info("Sending commit request to: "+replicaCoreUrl);
     long startMs = System.currentTimeMillis();
-    try (HttpSolrClient client = new HttpSolrClient(replicaCoreUrl)) {
+    try (HttpSolrClient client = createNewSolrClientBase(replicaCoreUrl)) {
       try {
         client.commit();
 

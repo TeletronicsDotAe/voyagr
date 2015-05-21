@@ -131,7 +131,7 @@ public class DeleteShardTest extends AbstractFullDistribZkTestBase {
         .getBaseURL();
     baseUrl = baseUrl.substring(0, baseUrl.length() - "collection1".length());
 
-    try (HttpSolrClient baseServer = new HttpSolrClient(baseUrl)) {
+    try (HttpSolrClient baseServer = createNewSolrClientBase(baseUrl)) {
       baseServer.setConnectionTimeout(15000);
       baseServer.setSoTimeout(60000);
       baseServer.request(request);

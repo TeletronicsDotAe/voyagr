@@ -112,7 +112,7 @@ public class AsyncMigrateRouteKeyTest extends MigrateRouteKeyTest {
         .getBaseURL();
     baseUrl = baseUrl.substring(0, baseUrl.length() - "collection1".length());
 
-    try (HttpSolrClient baseServer = new HttpSolrClient(baseUrl)) {
+    try (HttpSolrClient baseServer = createNewSolrClientBase(baseUrl)) {
       baseServer.setConnectionTimeout(15000);
       return baseServer.request(request);
     }

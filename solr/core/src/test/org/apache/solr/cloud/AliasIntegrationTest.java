@@ -138,7 +138,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     query.set("collection", "testalias");
     JettySolrRunner jetty = jettys.get(random().nextInt(jettys.size()));
     int port = jetty.getLocalPort();
-    try (HttpSolrClient client = new HttpSolrClient(buildUrl(port) + "/testalias")) {
+    try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
       res = client.query(query, SEARCH_CREDENTIALS);
       assertEquals(3, res.getResults().getNumFound());
     }
@@ -147,7 +147,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     query = new SolrQuery("*:*");
     jetty = jettys.get(random().nextInt(jettys.size()));
     port = jetty.getLocalPort();
-    try (HttpSolrClient client = new HttpSolrClient(buildUrl(port) + "/testalias")) {
+    try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
       res = client.query(query, SEARCH_CREDENTIALS);
       assertEquals(3, res.getResults().getNumFound());
     }
@@ -155,17 +155,17 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     createAlias("testalias", "collection2,collection1");
     
     // search with new cloud client
-    try (CloudSolrClient cloudSolrClient = new CloudSolrClient(zkServer.getZkAddress(), random().nextBoolean())) {
+    try (CloudSolrClient cloudSolrClient = createCloudSolrClientBase(zkServer.getZkAddress(), random().nextBoolean())) {
       cloudSolrClient.setParallelUpdates(random().nextBoolean());
       query = new SolrQuery("*:*");
       query.set("collection", "testalias");
-      res = cloudSolrClient.query(query, SEARCH_CREDENTIALS);
+      res = cloudSolrClient.query(query);
       assertEquals(5, res.getResults().getNumFound());
 
       // Try with setDefaultCollection
       query = new SolrQuery("*:*");
       cloudSolrClient.setDefaultCollection("testalias");
-      res = cloudSolrClient.query(query, SEARCH_CREDENTIALS);
+      res = cloudSolrClient.query(query);
       assertEquals(5, res.getResults().getNumFound());
     }
 
@@ -174,7 +174,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     query.set("collection", "testalias");
     jetty = jettys.get(random().nextInt(jettys.size()));
     port = jetty.getLocalPort();
-    try (HttpSolrClient client = new HttpSolrClient(buildUrl(port) + "/testalias")) {
+    try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
       res = client.query(query, SEARCH_CREDENTIALS);
       assertEquals(5, res.getResults().getNumFound());
     }
@@ -182,7 +182,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     query = new SolrQuery("*:*");
     jetty = jettys.get(random().nextInt(jettys.size()));
     port = jetty.getLocalPort();
-    try (HttpSolrClient client = new HttpSolrClient(buildUrl(port) + "/testalias")) {
+    try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
       res = client.query(query, SEARCH_CREDENTIALS);
       assertEquals(5, res.getResults().getNumFound());
     }
@@ -209,7 +209,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     // try a std client
     // search 1 and 2, but have no collections param
     query = new SolrQuery("*:*");
-    try (HttpSolrClient client = new HttpSolrClient(getBaseUrl((HttpSolrClient) clients.get(0)) + "/testalias")) {
+    try (HttpSolrClient client = createNewSolrClientBase(getBaseUrl((HttpSolrClient) clients.get(0)) + "/testalias")) {
       res = client.query(query, SEARCH_CREDENTIALS);
       assertEquals(5, res.getResults().getNumFound());
     }
@@ -219,7 +219,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     // a second alias
     createAlias("testalias2", "collection2");
 
-    try (HttpSolrClient client = new HttpSolrClient(getBaseUrl((HttpSolrClient) clients.get(0)) + "/testalias")) {
+    try (HttpSolrClient client = createNewSolrClientBase(getBaseUrl((HttpSolrClient) clients.get(0)) + "/testalias")) {
       SolrInputDocument doc8 = getDoc(id, 11, i1, -600, tlong, 600, t1,
           "humpty dumpy4 sat on a walls");
       client.add(doc8, -1, UPDATE_CREDENTIALS);
