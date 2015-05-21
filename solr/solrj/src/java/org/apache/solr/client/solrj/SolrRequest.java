@@ -23,14 +23,13 @@ import org.apache.solr.common.util.ContentStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.security.AuthCredentials;
-
-import com.google.common.base.Optional;
 
 /**
  * 
@@ -114,7 +113,7 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
   }
 
   public void setAuthCredentials(AuthCredentials authCredentials) {
-    this.authCredentials = Optional.fromNullable(authCredentials);
+    this.authCredentials = Optional.ofNullable(authCredentials);
   }
 
   public void setAuthCredentials(Optional<AuthCredentials> authCredentials) {

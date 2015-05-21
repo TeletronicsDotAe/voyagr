@@ -58,8 +58,6 @@ import org.junit.runners.model.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Optional;
-
 import javax.servlet.Filter;
 
 import java.io.File;
@@ -78,6 +76,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -511,7 +510,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     } else {
       authCredentials = null;
     }
-    return Optional.fromNullable(authCredentials);
+    return Optional.ofNullable(authCredentials);
   }
   
   protected String buildUrl(int port) {

@@ -588,7 +588,7 @@ public class HttpSolrClient extends SolrClient {
   
   public HttpContext getHttpContextForRequest(SolrRequest request) {
     return getHttpContext(
-        (request.getAuthCredentials() == null)?null:(AuthCredentials)request.getAuthCredentials().orNull(), 
+        (request.getAuthCredentials() == null)?null:(AuthCredentials)request.getAuthCredentials().orElse(null), 
         request.getPreemptiveAuthentication(), 
         getBaseURL());
   }

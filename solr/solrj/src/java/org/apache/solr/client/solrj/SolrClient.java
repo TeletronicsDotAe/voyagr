@@ -36,8 +36,6 @@ import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.security.AuthCredentials;
 
-import com.google.common.base.Optional;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.Serializable;
@@ -46,6 +44,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Abstraction through which all communication with a Solr server may be routed
@@ -108,7 +107,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse add(String collection, Collection<SolrInputDocument> docs, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return add(collection, docs, commitWithinMs, Optional.fromNullable(authCredentials));
+    return add(collection, docs, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse add(String collection, Collection<SolrInputDocument> docs, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -184,7 +183,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse add(String collection, SolrInputDocument doc, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return add(collection, doc, commitWithinMs, Optional.fromNullable(authCredentials));
+    return add(collection, doc, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse add(String collection, SolrInputDocument doc, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -213,7 +212,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse add(SolrInputDocument doc, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return add(doc, commitWithinMs, Optional.fromNullable(authCredentials));
+    return add(doc, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse add(SolrInputDocument doc, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -239,7 +238,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public UpdateResponse add(String collection, Iterator<SolrInputDocument> docIterator, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return add(collection, docIterator, Optional.fromNullable(authCredentials));
+    return add(collection, docIterator, Optional.ofNullable(authCredentials));
   }  
   
   private UpdateResponse add(String collection, Iterator<SolrInputDocument> docIterator, Optional<AuthCredentials> authCredentials)
@@ -319,7 +318,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse addBean(String collection, Object obj, int commitWithinMs, AuthCredentials authCredentials) throws IOException, SolrServerException {
-    return addBean(collection, obj, commitWithinMs, Optional.fromNullable(authCredentials));
+    return addBean(collection, obj, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse addBean(String collection, Object obj, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws IOException, SolrServerException {
@@ -344,7 +343,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse addBean(Object obj, int commitWithinMs, AuthCredentials authCredentials) throws IOException, SolrServerException {
-    return addBean(obj, commitWithinMs, Optional.fromNullable(authCredentials));
+    return addBean(obj, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse addBean(Object obj, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws IOException, SolrServerException {
@@ -410,7 +409,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse addBeans(String collection, Collection<?> beans, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return addBeans(collection, beans, commitWithinMs, Optional.fromNullable(authCredentials));
+    return addBeans(collection, beans, commitWithinMs, Optional.ofNullable(authCredentials));
   }
     
   private UpdateResponse addBeans(String collection, Collection<?> beans, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {  
@@ -463,7 +462,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public UpdateResponse addBeans(String collection, final Iterator<?> beanIterator, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return addBeans(collection, beanIterator, Optional.fromNullable(authCredentials));
+    return addBeans(collection, beanIterator, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse addBeans(String collection, final Iterator<?> beanIterator, Optional<AuthCredentials> authCredentials)
@@ -540,7 +539,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse commit(AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return commit(Optional.fromNullable(authCredentials));
+    return commit(Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse commit(Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -568,7 +567,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return commit(collection, waitFlush, waitSearcher, Optional.fromNullable(authCredentials));
+    return commit(collection, waitFlush, waitSearcher, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, Optional<AuthCredentials> authCredentials)
@@ -619,7 +618,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, boolean softCommit, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return commit(collection, waitFlush, waitSearcher, softCommit, Optional.fromNullable(authCredentials));
+    return commit(collection, waitFlush, waitSearcher, softCommit, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse commit(String collection, boolean waitFlush, boolean waitSearcher, boolean softCommit, Optional<AuthCredentials> authCredentials)
@@ -749,7 +748,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public UpdateResponse optimize(String collection, boolean waitFlush, boolean waitSearcher, int maxSegments, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return optimize(collection, waitFlush, waitSearcher, maxSegments, Optional.fromNullable(authCredentials));
+    return optimize(collection, waitFlush, waitSearcher, maxSegments, Optional.ofNullable(authCredentials));
   }
     
   private UpdateResponse optimize(String collection, boolean waitFlush, boolean waitSearcher, int maxSegments, Optional<AuthCredentials> authCredentials)
@@ -801,7 +800,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse rollback(String collection, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return rollback(collection, Optional.fromNullable(authCredentials));
+    return rollback(collection, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse rollback(String collection, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -878,7 +877,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse deleteById(String collection, String id, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return deleteById(collection, id, commitWithinMs, Optional.fromNullable(authCredentials));
+    return deleteById(collection, id, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse deleteById(String collection, String id, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -958,7 +957,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse deleteById(String collection, List<String> ids, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return deleteById(collection, ids, commitWithinMs, Optional.fromNullable(authCredentials));
+    return deleteById(collection, ids, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse deleteById(String collection, List<String> ids, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1038,7 +1037,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse deleteByQuery(String collection, String query, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return deleteByQuery(collection, query, commitWithinMs, Optional.fromNullable(authCredentials));
+    return deleteByQuery(collection, query, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse deleteByQuery(String collection, String query, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1068,7 +1067,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public UpdateResponse deleteByQuery(String query, int commitWithinMs, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return deleteByQuery(query, commitWithinMs, Optional.fromNullable(authCredentials));
+    return deleteByQuery(query, commitWithinMs, Optional.ofNullable(authCredentials));
   }
   
   private UpdateResponse deleteByQuery(String query, int commitWithinMs, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1089,7 +1088,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public SolrPingResponse ping(AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return ping(Optional.fromNullable(authCredentials));
+    return ping(Optional.ofNullable(authCredentials));
   }
   
   private SolrPingResponse ping(Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1115,7 +1114,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public QueryResponse query(String collection, SolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return query(collection, params, Optional.fromNullable(authCredentials));
+    return query(collection, params, Optional.ofNullable(authCredentials));
   }
   
   private QueryResponse query(String collection, SolrParams params, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1140,7 +1139,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public QueryResponse query(SolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return query(params, Optional.fromNullable(authCredentials));
+    return query(params, Optional.ofNullable(authCredentials));
   }
    
   private QueryResponse query(SolrParams params, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1165,7 +1164,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   }
   
   public QueryResponse query(String collection, SolrParams params, METHOD method, AuthCredentials authCredentials) throws SolrServerException, IOException {
-    return query(collection, params, method, Optional.fromNullable(authCredentials));
+    return query(collection, params, method, Optional.ofNullable(authCredentials));
   }
   
   private QueryResponse query(String collection, SolrParams params, METHOD method, Optional<AuthCredentials> authCredentials) throws SolrServerException, IOException {
@@ -1218,7 +1217,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public QueryResponse queryAndStreamResponse(String collection, SolrParams params, StreamingResponseCallback callback, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return queryAndStreamResponse(collection, params, callback, Optional.fromNullable(authCredentials));
+    return queryAndStreamResponse(collection, params, callback, Optional.ofNullable(authCredentials));
   }
   
   private QueryResponse queryAndStreamResponse(String collection, SolrParams params, StreamingResponseCallback callback, Optional<AuthCredentials> authCredentials)
@@ -1376,7 +1375,7 @@ public abstract class SolrClient implements Serializable, Closeable {
   
   public SolrDocumentList getById(String collection, Collection<String> ids, SolrParams params, AuthCredentials authCredentials)
       throws SolrServerException, IOException {
-    return getById(collection, ids, params, Optional.fromNullable(authCredentials));
+    return getById(collection, ids, params, Optional.ofNullable(authCredentials));
   }
   
   private SolrDocumentList getById(String collection, Collection<String> ids, SolrParams params, Optional<AuthCredentials> authCredentials)
