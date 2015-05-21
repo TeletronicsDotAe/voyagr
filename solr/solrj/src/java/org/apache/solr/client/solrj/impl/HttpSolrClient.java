@@ -475,11 +475,6 @@ public class HttpSolrClient extends SolrClient {
     boolean success = false;
     try {
       // Execute the method.
-      try {
-        throw new Exception("***** executing URI: " + method.getURI().toString() + ", context: " + context);
-      } catch (Exception e) {
-        e.printStackTrace(System.out);
-      }
       final HttpResponse response = (context != null)?httpClient.execute(method, context):httpClient.execute(method);
       int httpStatus = response.getStatusLine().getStatusCode();
       
