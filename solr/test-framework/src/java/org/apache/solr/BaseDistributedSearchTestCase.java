@@ -551,15 +551,11 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
    * Indexes the document in both the control client, and a randomly selected client
    */
   protected void indexDoc(SolrInputDocument doc) throws IOException, SolrServerException {
-    indexDoc(doc, UPDATE_CREDENTIALS);
-  }
-
-  protected void indexDoc(SolrInputDocument doc, AuthCredentials authCredentials) throws IOException, SolrServerException {
-    controlClient.add(doc, -1, authCredentials);
+    controlClient.add(doc);
 
     int which = (doc.getField(id).toString().hashCode() & 0x7fffffff) % clients.size();
     SolrClient client = clients.get(which);
-    client.add(doc, -1, authCredentials);
+    client.add(doc);
   }
   
   /**
@@ -629,17 +625,13 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   }
 
   protected QueryResponse queryServer(ModifiableSolrParams params) throws SolrServerException, IOException {
-    return queryServer(params, SEARCH_CREDENTIALS);
-  }
-
-  protected QueryResponse queryServer(ModifiableSolrParams params, AuthCredentials authCredentials) throws SolrServerException, IOException {
     // query a random server
     SolrClient client;
     do {
       int which = r.nextInt(clients.size());
       client = clients.get(which);
     } while (downedClients.contains(client));
-    QueryResponse rsp = client.query(params, authCredentials);
+    QueryResponse rsp = client.query(params);
     return rsp;
   }
 
@@ -663,39 +655,31 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
    * Returns the QueryResponse from {@link #queryServer}  
    */
   protected QueryResponse query(boolean setDistribParams, Object[] q) throws Exception {
-    return query(setDistribParams, q, SEARCH_CREDENTIALS);
-  }
-  
-  protected QueryResponse query(boolean setDistribParams, Object[] q, final AuthCredentials authCredentials) throws Exception {
     
     final ModifiableSolrParams params = new ModifiableSolrParams();
 
     for (int i = 0; i < q.length; i += 2) {
       params.add(q[i].toString(), q[i + 1].toString());
     }
-    return query(setDistribParams, params, authCredentials);
+    return query(setDistribParams, params);
   }
 
   /**
    * Returns the QueryResponse from {@link #queryServer}  
    */
   protected QueryResponse query(boolean setDistribParams, SolrParams p) throws Exception {
-    return query(setDistribParams, p, null);
-  }
-  
-  protected QueryResponse query(boolean setDistribParams, SolrParams p, final AuthCredentials authCredentials) throws Exception {
     
     final ModifiableSolrParams params = new ModifiableSolrParams(p);
 
     // TODO: look into why passing true causes fails
     params.set("distrib", "false");
-    final QueryResponse controlRsp = controlClient.query(params, authCredentials);
+    final QueryResponse controlRsp = controlClient.query(params);
     validateControlData(controlRsp);
 
     params.remove("distrib");
     if (setDistribParams) setDistributedParams(params);
 
-    QueryResponse rsp = queryServer(params, authCredentials);
+    QueryResponse rsp = queryServer(params);
 
     compareResponses(rsp, controlRsp);
 
@@ -710,7 +694,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
               int which = r.nextInt(clients.size());
               SolrClient client = clients.get(which);
               try {
-                QueryResponse rsp = client.query(new ModifiableSolrParams(params), authCredentials);
+                QueryResponse rsp = client.query(new ModifiableSolrParams(params));
                 if (verifyStress) {
                   compareResponses(rsp, controlRsp);
                 }
