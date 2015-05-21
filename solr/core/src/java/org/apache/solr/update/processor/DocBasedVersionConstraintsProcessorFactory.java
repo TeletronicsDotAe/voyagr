@@ -23,10 +23,12 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.exceptions.update.DocumentUpdateBaseException;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.component.RealTimeGetComponent;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.SchemaField;
@@ -400,17 +402,25 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
           // drop older update
           return;
         }
-
+        
+        Exception e = null;
         try {
           cmd.setVersion(oldSolrVersion);  // use optimistic concurrency to ensure that the doc has not changed in the meantime
           super.processAdd(cmd);
-          return;
-        } catch (SolrException e) {
-          if (e.code() == 409) {
+          e = SolrRequestInfo.getRequestInfo().getRsp().getException();
+        } catch (SolrException ex) {
+          e = ex;
+        }
+        
+        if (e != null) {
+          if (e instanceof SolrException) {
             // log.info ("##################### CONFLICT ADDING newDoc=" + newDoc + " newVersion=" + newVersion );
-            continue;  // if a version conflict, retry
+            if (e instanceof DocumentUpdateBaseException) continue;   // if a version conflict, retry
+            throw (SolrException)e;  // rethrow
           }
-          throw e;  // rethrow
+          throw (e instanceof RuntimeException)?(RuntimeException)e:new RuntimeException(e);  // rethrow
+        } else {
+          return;
         }
 
       }
@@ -463,7 +473,8 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
           // drop this older update
           return;
         }
-
+        
+        Exception e = null;
         // :TODO: should this logic be split and driven by two params?
         //   - deleteVersionParam to do a version check
         //   - some new boolean param to determine if a stub document gets added in place?
@@ -482,12 +493,19 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
 
           newCmd.setVersion(oldSolrVersion);  // use optimistic concurrency to ensure that the doc has not changed in the meantime
           super.processAdd(newCmd);
-          return;
-        } catch (SolrException e) {
-          if (e.code() == 409) {
-            continue;  // if a version conflict, retry
+          e = SolrRequestInfo.getRequestInfo().getRsp().getException();
+        } catch (SolrException ex) {
+          e = ex;
+        }
+        
+        if (e != null) {
+          if (e instanceof SolrException) {
+            if (e instanceof DocumentUpdateBaseException) continue;   // if a version conflict, retry
+            throw (SolrException)e;  // rethrow
           }
-          throw e;  // rethrow
+          throw (e instanceof RuntimeException)?(RuntimeException)e:new RuntimeException(e);  // rethrow
+        } else {
+          return;
         }
 
       }
