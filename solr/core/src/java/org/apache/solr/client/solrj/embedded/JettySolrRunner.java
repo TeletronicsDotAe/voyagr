@@ -363,7 +363,7 @@ public class JettySolrRunner {
       //   constraintMappings.add(createConstraint("search-<ollection-name>",  "/solr/<collection-name>/select", new String[]{"all-role", "search-role"} ));
       //   constraintMappings.add(createConstraint("term-<ollection-name>",  "/solr/<collection-name>/term", new String[]{"all-role", "search-role"} ));
       //   constraintMappings.add(createConstraint("get-<ollection-name>",  "/solr/<collection-name>/get", new String[]{"all-role", "search-role"} ));
-      //   constraintMappings.add(createConstraint("get-<ollection-name>",  "/solr/<collection-name>/stream", new String[]{"all-role", "search-role"} ));
+      //   constraintMappings.add(createConstraint("stream-<ollection-name>",  "/solr/<collection-name>/stream", new String[]{"all-role", "search-role"} ));
       // Basic reason this needs to be done to have the fairly simple authorization constrains described above is that URLs are constructed 
       // /solr/<collection-or-replica>/<operation> instead of /solr/<operation>/<collection-or-replica>, making it hard to authorize on "operation but across all collection",
       // but easy to authorize on "collection but all operations"
@@ -519,12 +519,12 @@ public class JettySolrRunner {
           //            <param-value>4|search-role,all-role|^.*/get$</param-value>
           //          </init-param>
           //          <init-param>
-          //            <param-name>get-constraint</param-name>
-          //            <param-value>4|search-role,all-role|^.*/stream$</param-value>
+          //            <param-name>stream-constraint</param-name>
+          //            <param-value>5|search-role,all-role|^.*/stream$</param-value>
           //          </init-param>
           //          <init-param>
           //            <param-name>all-constraint</param-name>
-          //            <param-value>5|all-role|^.*$</param-value>
+          //            <param-value>6|all-role|^.*$</param-value>
           //          </init-param>
           //        </filter>
           //      
@@ -537,8 +537,8 @@ public class JettySolrRunner {
           regExpSecurityFilterHolder.setInitParameter("search-constraint", "2|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/select$");
           regExpSecurityFilterHolder.setInitParameter("terms-constraint", "3|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/terms$");
           regExpSecurityFilterHolder.setInitParameter("get-constraint", "4|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/get$");
-          regExpSecurityFilterHolder.setInitParameter("get-constraint", "4|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/stream$");
-          regExpSecurityFilterHolder.setInitParameter("all-constraint", "5|" + ALL_ROLE + "|^.*$");
+          regExpSecurityFilterHolder.setInitParameter("stream-constraint", "5|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/stream$");
+          regExpSecurityFilterHolder.setInitParameter("all-constraint", "6|" + ALL_ROLE + "|^.*$");
           root.addFilter(regExpSecurityFilterHolder, "*", EnumSet.of(DispatcherType.REQUEST));
         }
         
