@@ -23,6 +23,7 @@ import org.apache.solr.response.ResultContext;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.DocIterator;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.request.LocalSolrQueryRequest;
@@ -58,6 +59,9 @@ public class QuerySenderListener extends AbstractSolrEventListener {
           @Override public SolrIndexSearcher getSearcher() { return searcher; }
           @Override public void close() { }
         };
+        // Might actually want to useAuthCredentialsFromOuterRequest here, because essentially (at least some times) it is
+        // indirectly a direct action on a outer request
+        ((LocalSolrQueryRequest)req).setAuthCredentials(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
 
         SolrQueryResponse rsp = new SolrQueryResponse();
         SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
