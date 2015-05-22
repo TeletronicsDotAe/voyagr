@@ -11,6 +11,7 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
 import org.apache.solr.core.CoreContainer;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,6 +106,7 @@ public class LeaderInitiatedRecoveryThread extends Thread {
     RequestRecovery recoverRequestCmd = new RequestRecovery();
     recoverRequestCmd.setAction(CoreAdminAction.REQUESTRECOVERY);
     recoverRequestCmd.setCoreName(coreNeedingRecovery);
+    recoverRequestCmd.setAuthCredentials(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
     
     while (continueTrying && ++tries <= maxTries) {
       if (tries > 1) {
