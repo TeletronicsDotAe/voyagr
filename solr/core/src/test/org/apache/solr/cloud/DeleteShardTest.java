@@ -77,8 +77,9 @@ public class DeleteShardTest extends AbstractFullDistribZkTestBase {
     try {
       deleteShard(SHARD1);
       fail("Deleting an active shard should not have succeeded");
-    } catch (HttpSolrClient.RemoteSolrException e) {
-      // expected
+    } catch (SolrException e) {
+      // Error message from OverseerCollectionProcessor.deleteShard
+      assertTrue(e.getMessage().startsWith("The slice: shard1 is currently active. Only non-active (or custom-hashed) slices can be deleted"));
     }
 
     setSliceState(SHARD1, Slice.INACTIVE);
