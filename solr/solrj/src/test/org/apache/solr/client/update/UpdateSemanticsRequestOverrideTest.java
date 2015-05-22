@@ -35,8 +35,6 @@ import org.junit.Test;
 public class UpdateSemanticsRequestOverrideTest extends SolrJettyTestBase {
   @BeforeClass
   public static void beforeTest() throws Exception {
-    // Not necessary to set solr.semantics.mode to anything, because
-    // classic-consistency-hybrid is default
     System.setProperty("solr.semantics.mode", "classic");
     createJetty(legacyExampleCollection1SolrHome());
   }
