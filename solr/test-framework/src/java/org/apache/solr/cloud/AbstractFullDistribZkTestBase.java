@@ -1883,7 +1883,6 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
   protected NamedList<Object> invokeCollectionApi(String... args) throws SolrServerException, IOException {
     ModifiableSolrParams params = new ModifiableSolrParams();
     SolrRequest request = new QueryRequest(params);
-    request.setAuthCredentials(SEARCH_CREDENTIALS);
     for (int i = 0; i < args.length - 1; i+=2) {
       params.add(args[i], args[i+1]);
     }
