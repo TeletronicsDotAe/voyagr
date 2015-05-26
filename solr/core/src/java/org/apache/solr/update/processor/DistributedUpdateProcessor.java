@@ -827,7 +827,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
         } else {
           SolrException pe;
           if (e instanceof SolrException) pe = (SolrException)e;
-          else pe = new SolrExceptionCausedByException(ErrorCode.PRECONDITION_FAILED, "Error", e);
+          else pe = new SolrExceptionCausedByException(ErrorCode.PRECONDITION_FAILED, e.getMessage(), e);
 
           List<SolrInputDocument> docsList = errors.get(i).req.uReq.getDocuments();
               

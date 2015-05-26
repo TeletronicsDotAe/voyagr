@@ -756,7 +756,7 @@ public class CloudSolrClient extends SolrClient {
       } else {
         SolrException pe;
         if (e instanceof SolrException) pe = (SolrException)e;
-        else pe = new SolrExceptionCausedByException(ErrorCode.PRECONDITION_FAILED, "Error", e);
+        else pe = new SolrExceptionCausedByException(ErrorCode.PRECONDITION_FAILED, e.getMessage(), e);
         
         LBHttpSolrClient.Req req = routes.get(url);
         UpdateRequest ureq = (UpdateRequest)req.getRequest();
