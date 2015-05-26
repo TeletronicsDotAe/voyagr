@@ -235,7 +235,7 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     createCollection("security_new_collection1", getShardCount(), 1, 1);
     List<Integer> expectedShardsReplica = new ArrayList<Integer>();
     expectedShardsReplica.add(getShardCount());
-    expectedShardsReplica.add(0);
+    expectedShardsReplica.add(1);
     checkForCollection("security_new_collection1", expectedShardsReplica, null);
     
     // Test unauthenticated user in sub-requests from Collection API to Core Admin API (creating the individual shards)
