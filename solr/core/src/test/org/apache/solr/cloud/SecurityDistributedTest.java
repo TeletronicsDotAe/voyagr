@@ -60,10 +60,11 @@ import org.junit.Test;
 public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
   
   @Override
-  public void setUp() throws Exception {
-    super.setUp();
+  protected void createServers(int numServers) throws Exception {
     System.setProperty(HttpClientUtil.HTTP_CLIENTS_MUST_ADAPT_TO_CREDENTIALS_CHANGES, "true");
+    super.createServers(numServers);    
   }
+
 
   @Override
   public void tearDown() throws Exception {
