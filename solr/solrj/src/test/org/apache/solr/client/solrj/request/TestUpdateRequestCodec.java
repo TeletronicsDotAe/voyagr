@@ -206,6 +206,7 @@ public class TestUpdateRequestCodec extends LuceneTestCase {
 //    in an UpdateRequest, so that a response can tell something (error/success) for each of the individual documents
 //    The bin-codec of course en-/de-codes this field, making binary format of SolrInputDocument incompatible, and therefore
 //    making binary format of UpdateRequest incompatible
+//    See also TestJavaBinCodes.testForwardCombat and .testBackCombat
 //    TODO The test is good at revealing such incompatibilities, so that we will remember to tell in release notes. We should
 //    note in release notes that compatibility is broken and then make a new solrj/updateReq_x_x.bin with the new format and
 //    use that, in order to be able to reveal if it is broken again
