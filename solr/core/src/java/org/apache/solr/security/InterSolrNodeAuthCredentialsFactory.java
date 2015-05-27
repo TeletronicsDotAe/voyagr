@@ -1,10 +1,6 @@
 package org.apache.solr.security;
 
-import java.util.HashSet;
-import java.util.Set;
-
 import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.security.AuthCredentials.AbstractAuthMethod;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -90,21 +86,9 @@ public class InterSolrNodeAuthCredentialsFactory {
         // TODO since internalAuthCredentials is something you use for "internal" requests against other Solr-nodes it should never
         // have different values for different Solr-nodes in the same cluster, and therefore the credentials ought to be specified
         // on a global level (e.g. in ZK) instead of on a "per node" level as solr.xml and VM-params are
-
-        String internalBasicAuthUsername = System.getProperty("internalAuthCredentialsBasicAuthUsername");
-        String internalBasicAuthPassword = System.getProperty("internalAuthCredentialsBasicAuthPassword");
         
-        Set<AbstractAuthMethod> authMethods = new HashSet<AbstractAuthMethod>();
-        if (internalBasicAuthUsername != null && internalBasicAuthPassword != null) {
-          authMethods.add(new AuthCredentials.BasicHttpAuth(internalBasicAuthUsername, internalBasicAuthPassword));
-        }
-        if (internalAuthCredentials == null) {
-          internalAuthCredentials = new AuthCredentials(authMethods);
-        } else {
-          // Not creating a new instance but replacing auth-methods in order to have the changes propagate
-          // to objects already using and observing it
-          internalAuthCredentials.setAuthMethods(authMethods);
-        }
+        internalAuthCredentials = AuthCredentials.createBasicAuthCredentialsFromVMParams("internalAuthCredentialsBasicAuthUsername", "internalAuthCredentialsBasicAuthPassword", internalAuthCredentials);
+
         alreadyDone = true;
       }
       return internalAuthCredentials;

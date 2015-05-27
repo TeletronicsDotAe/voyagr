@@ -22,7 +22,9 @@ import java.io.FilenameFilter;
 import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.solr.BaseDistributedSearchTestCase;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.request.ContentStreamUpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.util.ExternalPaths;
@@ -49,6 +51,19 @@ public class SolrCloudExampleTest extends AbstractFullDistribZkTestBase {
   public void distribSetUp() throws Exception {
     super.distribSetUp();
     System.setProperty("numShards", Integer.toString(sliceCount));
+    if (BaseDistributedSearchTestCase.RUN_WITH_COMMON_SECURITY) {
+      System.setProperty(SolrCLI.BASIC_AUTH_USERNAME_VM_PARAM, JettySolrRunner.ALL_USERNAME);
+      System.setProperty(SolrCLI.BASIC_AUTH_PASSWORD_VM_PARAM, JettySolrRunner.ALL_PASSWORD);
+    }
+  }
+
+  @Override
+  public void distribTearDown() throws Exception {
+    if (BaseDistributedSearchTestCase.RUN_WITH_COMMON_SECURITY) {
+      System.clearProperty(SolrCLI.BASIC_AUTH_USERNAME_VM_PARAM);
+      System.clearProperty(SolrCLI.BASIC_AUTH_PASSWORD_VM_PARAM);
+    }
+    super.distribTearDown();
   }
 
   @Test

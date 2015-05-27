@@ -113,11 +113,33 @@ public class AuthCredentials extends Observable implements Serializable {
     return sb.toString();
   }
 
-
   public static AuthCredentials createBasicAuthCredentials(String username, String password) {
     Set<AbstractAuthMethod> authMethods = new HashSet<AbstractAuthMethod>();
     authMethods.add(new BasicHttpAuth(username, password));
     return new AuthCredentials(authMethods);
+  }
+  
+  public static AuthCredentials createBasicAuthCredentialsFromVMParams(String usernameVMParam, String passwordVMParam) {
+    return createBasicAuthCredentialsFromVMParams(usernameVMParam, passwordVMParam, null);
+  }
+  
+  public static AuthCredentials createBasicAuthCredentialsFromVMParams(String usernameVMParam, String passwordVMParam, AuthCredentials buildOn) {
+    String basicAuthUsername = System.getProperty(usernameVMParam);
+    String basicAuthPassword = System.getProperty(passwordVMParam);
+    
+    Set<AbstractAuthMethod> authMethods = new HashSet<AbstractAuthMethod>();
+    if (basicAuthUsername != null && basicAuthPassword != null) {
+      authMethods.add(new AuthCredentials.BasicHttpAuth(basicAuthUsername, basicAuthPassword));
+    }
+    if (buildOn == null) {
+      buildOn = new AuthCredentials(authMethods);
+    } else {
+      // Not creating a new instance but replacing auth-methods in order to have the changes propagate
+      // to objects already using and observing it
+      buildOn.setAuthMethods(authMethods);
+    }
+
+    return buildOn;
   }
   
 }

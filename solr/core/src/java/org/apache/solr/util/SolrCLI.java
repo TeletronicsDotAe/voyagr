@@ -54,6 +54,7 @@ import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.security.AuthCredentials;
 import org.noggit.CharArr;
 import org.noggit.JSONParser;
 import org.noggit.JSONWriter;
@@ -144,6 +145,9 @@ public class SolrCLI {
   public static Logger log = Logger.getLogger(SolrCLI.class);    
   public static final String DEFAULT_SOLR_URL = "http://localhost:8983/solr";  
   public static final String ZK_HOST = "localhost:9983";
+  public static final String BASIC_AUTH_USERNAME_VM_PARAM = "authCredentialsBasicAuthUsername";
+  public static final String BASIC_AUTH_PASSWORD_VM_PARAM = "authCredentialsBasicAuthPassword";
+  protected static AuthCredentials authCredentials;
   
   @SuppressWarnings("static-access")
   public static Option[] cloudOptions =  new Option[] {
@@ -182,7 +186,7 @@ public class SolrCLI {
     // process command-line args to configure this application
     CommandLine cli = 
         processCommandLineArgs(joinCommonAndToolOptions(tool.getOptions()), toolArgs);
-
+    
     // for SSL support, try to accommodate relative paths set for SSL store props
     String solrInstallDir = System.getProperty("solr.install.dir");
     if (solrInstallDir != null) {
@@ -404,12 +408,19 @@ public class SolrCLI {
     return wasCommError;
   }
   
+  public static AuthCredentials getAuthCredentials() {
+    if (authCredentials == null) {
+      authCredentials = AuthCredentials.createBasicAuthCredentialsFromVMParams(BASIC_AUTH_USERNAME_VM_PARAM, BASIC_AUTH_PASSWORD_VM_PARAM);
+    }
+    return authCredentials;
+  }
+  
   public static CloseableHttpClient getHttpClient() {
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 128);
     params.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, 32);
     params.set(HttpClientUtil.PROP_FOLLOW_REDIRECTS, false);
-    return HttpClientUtil.createClient(params);    
+    return HttpClientUtil.createClient(params, null, getAuthCredentials());    
   }
   
   @SuppressWarnings("deprecation")
