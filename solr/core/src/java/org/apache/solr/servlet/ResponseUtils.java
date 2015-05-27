@@ -112,28 +112,20 @@ public class ResponseUtils {
       SolrQueryResponse solrRsp) throws IOException {
     String msg = getMsg(ex);
     
-    if (ex instanceof PartialErrors) {
+    if (ex instanceof SolrException) {
       if (response != null) {
         ((SolrException) ex).encodeTypeInHttpServletResponse(response);
         response.setStatus(((SolrException) ex).code(), msg);
       }
-      return true;
-    } else {
-      if (ex instanceof SolrException) {
-        if (response != null) ((SolrException) ex).encodeTypeInHttpServletResponse(response);
-        if (solrRsp != null) {
-          if (((SolrException) ex).addPropertiesToParent(solrRsp.getValues())) {
-            if (response != null) response.setStatus(((SolrException) ex).code(), msg);
-            return true;
-          }
-        }
-      }
-      
-      CodeAndTrace codeAndTrace = getCodeAndTrace(ex);
-      
-      if (response != null) sendError(response, codeAndTrace.code, msg + ((codeAndTrace.trace != null)?("\n\n" + codeAndTrace.trace):""));
+      if (ex instanceof PartialErrors) return true;
+      if (solrRsp != null && ((SolrException) ex).addPropertiesToParent(solrRsp.getValues())) return true;
       return false;
     }
+          
+    CodeAndTrace codeAndTrace = getCodeAndTrace(ex);
+    
+    if (response != null) sendError(response, codeAndTrace.code, msg + ((codeAndTrace.trace != null)?("\n\n" + codeAndTrace.trace):""));
+    return false;
   }
   
   // Would be nice to get rid of getErrorInfo and to get all use writeResponse/sendError

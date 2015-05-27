@@ -17,6 +17,8 @@ package org.apache.solr.util;
  */
 
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpStatus;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -30,8 +32,17 @@ import org.apache.http.util.EntityUtils;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
+import org.apache.solr.common.util.NamedList;
 import org.apache.solr.security.AuthCredentials;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.JsonParser;
+import org.codehaus.jackson.JsonToken;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.type.TypeReference;
 
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
@@ -40,6 +51,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
@@ -233,11 +246,35 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
     HttpEntity entity = null;
     try {
       final HttpContext context = getHttpContextForRequest(request);
-      entity = httpClient.execute(request, context).getEntity();
-      return EntityUtils.toString(entity, StandardCharsets.UTF_8);
+      CloseableHttpResponse response = httpClient.execute(request, context);
+      try {
+      entity = response.getEntity();
+      String JSONStrPayload = EntityUtils.toString(entity, StandardCharsets.UTF_8);
+        // Stolen from HttpSolrClient
+        int httpStatus = response.getStatusLine().getStatusCode();
+        String charset = EntityUtils.getContentCharSet(response.getEntity());
+        if (httpStatus != HttpStatus.SC_OK) {
+          StringBuilder additionalMsg = new StringBuilder();
+          additionalMsg.append( "\n\n" );
+          additionalMsg.append( "request: "+request.getURI() );
+          NamedList<Object> payload = (response.getFirstHeader(HttpSolrClient.HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?parseJSON(JSONStrPayload):null;
+          SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
+          throw ex;
+        }
+      return JSONStrPayload;
+      } finally {
+        response.close();
+      }
     } finally {
       EntityUtils.consumeQuietly(entity);
     }
+  }
+  
+  private NamedList<Object> parseJSON(String JSON) throws IOException {
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Object> map = mapper.readValue(JSON, 
+        new TypeReference<HashMap<String,Object>>(){});
+    return null;
   }
 
   @Override

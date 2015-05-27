@@ -48,6 +48,7 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CommonParams;
+import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
@@ -62,6 +63,7 @@ import org.apache.solr.core.SolrXmlConfig;
 import org.apache.solr.handler.ContentStreamHandlerBase;
 import org.apache.solr.logging.MDCUtils;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrQueryRequestBase;
 import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.QueryResponseWriter;
@@ -228,12 +230,12 @@ public class SolrDispatchFilter extends BaseSolrFilter {
     MDCUtils.clearMDC();
 
     if (abortErrorMessage != null) {
-      ResponseUtils.sendError((HttpServletResponse) response, 500, abortErrorMessage);
+      sendError((HttpServletResponse) response, 500, abortErrorMessage);
       return;
     }
 
     if (this.cores == null) {
-      ResponseUtils.sendError((HttpServletResponse) response, 503, "Server is shutting down or failed to initialize");
+      sendError((HttpServletResponse) response, 503, "Server is shutting down or failed to initialize");
       return;
     }
 
@@ -808,12 +810,59 @@ public class SolrDispatchFilter extends BaseSolrFilter {
     sreq.getCore().execute( handler, sreq, rsp );
   }
 
+  private void sendError(HttpServletResponse response, int code, String message) throws IOException {
+	  ResponseUtils.sendError(response, code, message);
+  }
+
   protected void sendError(SolrCore core,
       SolrQueryRequest req, 
       ServletRequest request, 
       HttpServletResponse response, 
       Throwable ex) throws IOException {
-    ResponseUtils.sendError(response, ex, null);
+    Exception exp = null;
+    SolrCore localCore = null;
+    try {
+      SolrQueryResponse solrResp = new SolrQueryResponse();
+      if(ex instanceof Exception) {
+        solrResp.setException((Exception)ex);
+      }
+      else {
+        solrResp.setException(new RuntimeException(ex));
+      }
+      if(core==null) {
+        localCore = cores.getCore(""); // default core
+      } else {
+        localCore = core;
+      }
+      if(req==null) {
+        final SolrParams solrParams;
+        if (request instanceof HttpServletRequest) {
+          // use GET parameters if available:
+          solrParams = SolrRequestParsers.parseQueryString(((HttpServletRequest) request).getQueryString());
+        } else {
+          // we have no params at all, use empty ones:
+          solrParams = new MapSolrParams(Collections.<String,String>emptyMap());
+        }
+        req = new SolrQueryRequestBase(core, solrParams) {};
+      }
+      QueryResponseWriter writer = core.getQueryResponseWriter(req);
+      writeResponse(solrResp, response, writer, req, Method.GET);
+    }
+    catch (Exception e) { // This error really does not matter
+         exp = e;
+    } finally {
+      try {
+        if (exp != null) {
+          SimpleOrderedMap info = new SimpleOrderedMap();
+          int code = ResponseUtils.getErrorInfo(ex, info, log);
+          sendError(response, code, info.toString());
+        }
+      } finally {
+        if (core == null && localCore != null) {
+          localCore.close();
+        }
+      }
+   }
   }
 
   //---------------------------------------------------------------------

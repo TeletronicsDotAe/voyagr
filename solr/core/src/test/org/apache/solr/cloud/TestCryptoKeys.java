@@ -27,6 +27,7 @@ import java.util.Map;
 
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.cloud.SolrZkClient;
 import org.apache.solr.core.ConfigOverlay;
 import org.apache.solr.core.MemClassLoader;
@@ -163,10 +164,12 @@ public class TestCryptoKeys extends AbstractFullDistribZkTestBase {
         Arrays.asList("overlay", "runtimeLib", blobName, "version"),
         1l, 10);
 
-    Map map = TestSolrConfigHandler.getRespMap("/runtime?wt=json", client);
-    String s = (String) ConfigOverlay.getObjectByPath(map, false, Arrays.asList("error", "msg"));
-    assertNotNull(TestBlobHandler.getAsString(map), s);
-    assertTrue(TestBlobHandler.getAsString(map), s.contains("should be signed with one of the keys in ZK /keys/exe"));
+    try {
+      TestSolrConfigHandler.getRespMap("/runtime?wt=json", client);
+      fail("SolrException with messsage including 'should be signed with one of the keys in ZK /keys/exe' expected");
+    } catch (SolrException e) {
+      assertTrue(e.getMessage(), e.getMessage().contains("should be signed with one of the keys in ZK /keys/exe"));
+    }
 
     String wrongSig = "QKqHtd37QN02iMW9UEgvAO9g9qOOuG5vEBNkbUsN7noc2hhXKic/ABFIOYJA9PKw61mNX2EmNFXOcO3WClYdSw==";
 
@@ -182,10 +185,12 @@ public class TestCryptoKeys extends AbstractFullDistribZkTestBase {
         Arrays.asList("overlay", "runtimeLib", blobName, "sig"),
         wrongSig, 10);
 
-    map = TestSolrConfigHandler.getRespMap("/runtime?wt=json", client);
-    s = (String) ConfigOverlay.getObjectByPath(map, false, Arrays.asList("error", "msg"));
-    assertNotNull(TestBlobHandler.getAsString(map), s);//No key matched signature for jar
-    assertTrue(TestBlobHandler.getAsString(map), s.contains("No key matched signature for jar"));
+    try {
+      TestSolrConfigHandler.getRespMap("/runtime?wt=json", client);
+      fail("SolrException with messsage including 'No key matched signature for jar' expected");
+    } catch (SolrException e) {
+      assertTrue(e.getMessage(), e.getMessage().contains("No key matched signature for jar"));
+    }
 
     String rightSig = "nKmpxWH7XBlGuf51wEyIabN+HrkmFa/2sKJFIC/SeCKa1+txQxgO8vuekTGXymksq9b3K8Hs2+KsK3c9zTYORA==";
 
@@ -201,7 +206,7 @@ public class TestCryptoKeys extends AbstractFullDistribZkTestBase {
         Arrays.asList("overlay", "runtimeLib", blobName, "sig"),
         rightSig, 10);
 
-    map = TestSolrConfigHandler.testForResponseElement(client,
+    Map map = TestSolrConfigHandler.testForResponseElement(client,
         null,
         "/runtime?wt=json",
         null,
