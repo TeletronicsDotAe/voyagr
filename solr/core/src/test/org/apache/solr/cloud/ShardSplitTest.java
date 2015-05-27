@@ -19,6 +19,7 @@ package org.apache.solr.cloud;
 
 import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
 import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
+
 import org.apache.http.params.CoreConnectionPNames;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrClient;
@@ -30,6 +31,7 @@ import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.SolrDocument;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.CompositeIdRouter;
 import org.apache.solr.common.cloud.DocRouter;
@@ -108,7 +110,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
     try {
       splitShard(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1, subRanges, null);
       fail("Shard splitting with just one custom hash range should not succeed");
-    } catch (HttpSolrClient.RemoteSolrException e) {
+    } catch (SolrException e) {
       log.info("Expected exception:", e);
     }
     subRanges.clear();
@@ -119,7 +121,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
     try {
       splitShard(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1, subRanges, null);
       fail("Shard splitting with missing hashes in between given ranges should not succeed");
-    } catch (HttpSolrClient.RemoteSolrException e) {
+    } catch (SolrException e) {
       log.info("Expected exception:", e);
     }
     subRanges.clear();
@@ -132,7 +134,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
     try {
       splitShard(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1, subRanges, null);
       fail("Shard splitting with overlapping ranges should not succeed");
-    } catch (HttpSolrClient.RemoteSolrException e) {
+    } catch (SolrException e) {
       log.info("Expected exception:", e);
     }
     subRanges.clear();
@@ -202,7 +204,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
           log.info("Layout after split: \n");
           printLayout();
           break;
-        } catch (HttpSolrClient.RemoteSolrException e) {
+        } catch (SolrException e) {
           if (e.code() != 500)  {
             throw e;
           }
@@ -282,7 +284,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
         try {
           splitShard(collectionName, SHARD1, null, null);
           break;
-        } catch (HttpSolrClient.RemoteSolrException e) {
+        } catch (SolrException e) {
           if (e.code() != 500) {
             throw e;
           }
@@ -364,7 +366,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
         try {
           splitShard(collectionName, null, null, splitKey);
           break;
-        } catch (HttpSolrClient.RemoteSolrException e) {
+        } catch (SolrException e) {
           if (e.code() != 500) {
             throw e;
           }
