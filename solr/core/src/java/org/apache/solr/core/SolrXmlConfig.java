@@ -420,7 +420,7 @@ public class SolrXmlConfig {
   }
 
   private static PluginInfo getRecentlyLookedUpOrUpdatedDocumentsCachePluginInfo(Config config) {
-    Node node = config.getNode("solr/fieldCache", false);
+    Node node = config.getNode("solr/recentlyLookedUpOrUpdatedDocumentsCache", false);
     return (node == null) ? null : new PluginInfo(node, "recentlyLookedUpOrUpdatedDocumentsCache", false, true);
   }
 
