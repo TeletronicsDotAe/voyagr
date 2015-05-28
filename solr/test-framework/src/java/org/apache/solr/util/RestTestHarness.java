@@ -224,7 +224,6 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   
   protected AuthCredentials getAuthCredentials(HttpUriRequest request) {
     String path = request.getURI().getPath();
-    System.out.println("****** " + path);
     if (path.startsWith("/update")) return UPDATE_CREDENTIALS;
     if (path.startsWith("/search") || path.startsWith("/terms") || path.startsWith("/get")) return SEARCH_CREDENTIALS;
     return ALL_CREDENTIALS;
