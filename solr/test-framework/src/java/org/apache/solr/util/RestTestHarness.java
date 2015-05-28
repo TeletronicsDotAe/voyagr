@@ -268,7 +268,17 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
     ObjectMapper mapper = new ObjectMapper();
     Map<String, Object> map = mapper.readValue(JSON, 
         new TypeReference<HashMap<String,Object>>(){});
-    return null;
+    return mapToNamedList(map);
+  }
+  
+  private NamedList<Object> mapToNamedList(Map<String, Object> map) {
+    NamedList<Object> result = new NamedList<Object>();
+    for (Map.Entry<String, Object> entry : map.entrySet()) {
+      Object value = entry.getValue();
+      if (value instanceof Map) value = mapToNamedList((Map<String, Object>)value);
+      result.add(entry.getKey(), value);
+    }
+    return result;
   }
 
   @Override
