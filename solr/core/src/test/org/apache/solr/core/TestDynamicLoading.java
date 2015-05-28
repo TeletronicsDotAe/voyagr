@@ -21,6 +21,7 @@ package org.apache.solr.core;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.cloud.AbstractFullDistribZkTestBase;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.handler.TestBlobHandler;
 import org.apache.solr.util.RESTfulServerProvider;
 import org.apache.solr.util.RestTestHarness;
@@ -111,20 +112,24 @@ public class TestDynamicLoading extends AbstractFullDistribZkTestBase {
         Arrays.asList("overlay", "requestHandler", "/test1", "class"),
         "org.apache.solr.core.BlobStoreTestRequestHandler",10);
 
-    Map map = TestSolrConfigHandler.getRespMap("/test1?wt=json", client);
+    try {
+      TestSolrConfigHandler.getRespMap("/test1?wt=json", client);
+      fail("SolrException with messsage including '.system collection not available' expected");
+    } catch (SolrException e) {
+      assertTrue(e.getMessage(), e.getMessage().contains(".system collection not available"));
+    }
 
-    assertNotNull(TestBlobHandler.getAsString(map), map = (Map) map.get("error"));
-    assertEquals(TestBlobHandler.getAsString(map), ".system collection not available", map.get("msg"));
 
-
-    TestBlobHandler.createSystemCollection(new HttpSolrClient(baseURL, randomClient.getHttpClient()));
+    TestBlobHandler.createSystemCollection(new AutoCredentialsHttpSolrClient(baseURL, randomClient.getHttpClient()));
     waitForRecoveriesToFinish(".system", true);
 
-    map = TestSolrConfigHandler.getRespMap("/test1?wt=json", client);
+    try {
+      TestSolrConfigHandler.getRespMap("/test1?wt=json", client);
+      fail("SolrException with messsage including 'no such blob or version available: colltest/1' expected");
+    } catch (SolrException e) {
+      assertTrue(e.getMessage(), e.getMessage().contains("no such blob or version available: colltest/1"));
+    }
 
-
-    assertNotNull(map = (Map) map.get("error"));
-    assertEquals("full output " + TestBlobHandler.getAsString(map), "no such blob or version available: colltest/1" , map.get("msg"));
     payload = " {\n" +
         "  'set' : {'watched': {" +
         "                    'x':'X val',\n" +
@@ -146,12 +151,18 @@ public class TestDynamicLoading extends AbstractFullDistribZkTestBase {
 
 
     for(int i=0;i<100;i++) {
-      map = TestSolrConfigHandler.getRespMap("/test1?wt=json", client);
-      if("X val".equals(map.get("x"))){
-         success = true;
-         break;
+      try {
+        Map map = TestSolrConfigHandler.getRespMap("/test1?wt=json", client);
+        if("X val".equals(map.get("x"))){
+           success = true;
+           break;
+        }
+        Thread.sleep(100);
+      } catch (SolrException e) {
+        // Added this because this exception is currently thrown - it also happens in clean Apache Solr 5.1.0, but
+        // they do not throw exceptions (just add an "error" entry in the returned map)
+        assertTrue(e.getMessage(), e.getMessage().contains("no such blob or version available: colltest/1"));  
       }
-      Thread.sleep(100);
     }
     ByteBuffer jar = null;
 
