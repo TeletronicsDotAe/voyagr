@@ -16,6 +16,7 @@ package org.apache.solr.util;
  * limitations under the License.
  */
 
+import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -58,17 +59,9 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   private RESTfulServerProvider serverProvider;
   private CloseableHttpClient httpClient = HttpClientUtil.createClient(new
       ModifiableSolrParams());
-  private AuthCredentials authCredentials;
   
   public RestTestHarness(RESTfulServerProvider serverProvider) {
-    this(serverProvider, null, null);
-  }
-  
-  public RestTestHarness(RESTfulServerProvider serverProvider, String username, String password) {
     this.serverProvider = serverProvider;
-    if (username != null && password != null) {
-      authCredentials = AuthCredentials.createBasicAuthCredentials(username, password);
-    }
   }
   
   public String getBaseURL() {
@@ -222,7 +215,7 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
     }
   }
   
-  protected AuthCredentials getAuthCredentials(HttpUriRequest request) {
+  protected static AuthCredentials getAuthCredentials(HttpUriRequest request) {
     String path = request.getURI().getPath();
     if (path.startsWith("/update")) return UPDATE_CREDENTIALS;
     if (path.startsWith("/search") || path.startsWith("/terms") || path.startsWith("/get")) return SEARCH_CREDENTIALS;
@@ -230,20 +223,49 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   }
   
   public HttpContext getHttpContextForRequest(HttpUriRequest request) {
-    return HttpSolrClient.getHttpContext(getAuthCredentials(request), true, getBaseURL());
+    return getHttpContextForRequest(request, getBaseURL());
+  }
+
+  public static HttpContext getHttpContextForRequest(HttpUriRequest request, String baseURL) {
+    return HttpSolrClient.getHttpContext(getAuthCredentials(request), true, baseURL);
   }
 
   /**
    * Executes the given request and returns the response.
    */
-  private String getResponse(HttpUriRequest request) throws IOException {
+  public String getResponse(HttpUriRequest request) throws IOException {
+    return getResponse(httpClient, request, getHttpContextForRequest(request));
+  }
+  
+  public static String getResponse(CloseableHttpClient httpClient, HttpUriRequest request, HttpContext context) throws IOException {
+    RawResponseAndCharset rrac = getRawResponseAndCharset(httpClient, request, context);
+    return new String(rrac.rawResponse, rrac.charset);
+  }
+  
+  public byte[] getRawResponse(HttpUriRequest request) throws IOException {
+    return getRawResponse(httpClient, request, getHttpContextForRequest(request));
+  }
+  
+  public static byte[] getRawResponse(CloseableHttpClient httpClient, HttpUriRequest request, HttpContext context) throws IOException {
+    return getRawResponseAndCharset(httpClient, request, context).rawResponse;
+  }
+  
+  public static final class RawResponseAndCharset {
+    public byte[] rawResponse;
+    public String charset;
+    public RawResponseAndCharset(byte[] rawResponse, String charset) {
+      this.rawResponse = rawResponse;
+      this.charset = charset;
+    }
+  }
+  
+  private static RawResponseAndCharset getRawResponseAndCharset(CloseableHttpClient httpClient, HttpUriRequest request, HttpContext context) throws IOException {
     HttpEntity entity = null;
     try {
-      final HttpContext context = getHttpContextForRequest(request);
       CloseableHttpResponse response = httpClient.execute(request, context);
       try {
       entity = response.getEntity();
-      String JSONStrPayload = EntityUtils.toString(entity, StandardCharsets.UTF_8);
+      byte[] rawPayload = IOUtils.toByteArray(entity.getContent());
         // Stolen from HttpSolrClient
         int httpStatus = response.getStatusLine().getStatusCode();
         String charset = EntityUtils.getContentCharSet(response.getEntity());
@@ -251,11 +273,11 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
           StringBuilder additionalMsg = new StringBuilder();
           additionalMsg.append( "\n\n" );
           additionalMsg.append( "request: "+request.getURI() );
-          NamedList<Object> payload = (response.getFirstHeader(HttpSolrClient.HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?parseJSON(JSONStrPayload):null;
-          SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
+          NamedList<Object> payload = (response.getFirstHeader(HttpSolrClient.HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?parseJSON(new String(rawPayload, charset)):null;
+          SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload, rawPayload);
           throw ex;
         }
-      return JSONStrPayload;
+      return new RawResponseAndCharset(rawPayload, charset);
       } finally {
         response.close();
       }
@@ -264,14 +286,20 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
     }
   }
   
-  private NamedList<Object> parseJSON(String JSON) throws IOException {
-    ObjectMapper mapper = new ObjectMapper();
-    Map<String, Object> map = mapper.readValue(JSON, 
-        new TypeReference<HashMap<String,Object>>(){});
-    return mapToNamedList(map);
+  private static NamedList<Object> parseJSON(String JSON) {
+    try {
+      ObjectMapper mapper = new ObjectMapper();
+      Map<String, Object> map = mapper.readValue(JSON, 
+          new TypeReference<HashMap<String,Object>>(){});
+      return mapToNamedList(map);
+    } catch (Exception e) {
+      NamedList<Object> result = new NamedList<Object>();
+      result.add("parseException", e);
+      return result;
+    }
   }
   
-  private NamedList<Object> mapToNamedList(Map<String, Object> map) {
+  private static NamedList<Object> mapToNamedList(Map<String, Object> map) {
     NamedList<Object> result = new NamedList<Object>();
     for (Map.Entry<String, Object> entry : map.entrySet()) {
       Object value = entry.getValue();

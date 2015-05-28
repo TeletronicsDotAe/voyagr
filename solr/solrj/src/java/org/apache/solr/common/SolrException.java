@@ -44,6 +44,7 @@ public class SolrException extends RuntimeException {
 
 	private static Logger log = LoggerFactory.getLogger(SolrException.class);
 	protected NamedList<Object> payload = new SimpleOrderedMap<Object>();
+	protected byte[] rawPayload;
 	
   /**
    * This list of valid HTTP Status error codes that Solr may return in 
@@ -238,7 +239,15 @@ public class SolrException extends RuntimeException {
       this.payload.clear();
     }
   }
+
+  public byte[] getRawPayload() {
+    return rawPayload;
+  }
   
+  private void setRawPayload(byte[] rawPayload) {
+    this.rawPayload = rawPayload;
+  }
+
   public void setProperty(String name, Object val) {
     NamedList<Object> properties = getProperties(true);
     properties.add(name, val);
@@ -267,7 +276,7 @@ public class SolrException extends RuntimeException {
     payload.remove(ERROR_TYPE);
     payload.remove(ERROR_CODE);
     payload.remove(ERROR_MSG);
-    return (SolrException)createFromClassNameCodeAndMsg(errorType, errorCode, errorMsg, payload);
+    return (SolrException)createFromClassNameCodeAndMsg(errorType, errorCode, errorMsg, payload, null);
   }
   
   public NamedList<Object> encodeInNamedList() {
@@ -290,9 +299,9 @@ public class SolrException extends RuntimeException {
 	protected static final String HTTP_ERROR_HEADER_KEY = SolrResponse.HTTP_HEADER_KEY_PREFIX + ERROR_TYPE;
 	protected static final String PROPERTIES = "properties";
 	
-  public static SolrException decodeFromHttpMethod(HttpResponse response, String reasonPhraseEncoding, String additionalMsgToPutInCreatedException, NamedList<Object> payload) throws UnsupportedEncodingException {
+  public static SolrException decodeFromHttpMethod(HttpResponse response, String reasonPhraseEncoding, String additionalMsgToPutInCreatedException, NamedList<Object> payload, byte[] rawPayload) throws UnsupportedEncodingException {
     Header errorType = response.getFirstHeader(HTTP_ERROR_HEADER_KEY);
-    return createFromClassNameCodeAndMsg((errorType != null)?errorType.getValue():null, response.getStatusLine().getStatusCode(), java.net.URLDecoder.decode(response.getStatusLine().getReasonPhrase(), reasonPhraseEncoding) + additionalMsgToPutInCreatedException, payload);
+    return createFromClassNameCodeAndMsg((errorType != null)?errorType.getValue():null, response.getStatusLine().getStatusCode(), java.net.URLDecoder.decode(response.getStatusLine().getReasonPhrase(), reasonPhraseEncoding) + additionalMsgToPutInCreatedException, payload, rawPayload);
   }
   
   public void encodeTypeInHttpServletResponse(Object httpServletResponse) {
@@ -317,13 +326,14 @@ public class SolrException extends RuntimeException {
     return false;
   }
   
-  protected static SolrException createFromClassNameCodeAndMsg(String className, int code, String msg, NamedList<Object> payload) {
+  protected static SolrException createFromClassNameCodeAndMsg(String className, int code, String msg, NamedList<Object> payload, byte[] rawPayload) {
 		if (className != null) {
   		try {
     		Class clazz = Class.forName(className);
     		if (SolrException.class.isAssignableFrom(clazz)) {
     			SolrException result = ((Class<SolrException>)clazz).getConstructor(ErrorCode.class, String.class).newInstance(SolrException.ErrorCode.getErrorCode(code), msg);
     			result.setPayload(payload);
+    			result.setRawPayload(rawPayload);
     			return result;
     		}
       } catch (ClassNotFoundException e) {

@@ -73,6 +73,7 @@ import org.apache.solr.security.AuthCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ConnectException;
@@ -526,8 +527,9 @@ public class HttpSolrClient extends SolrClient {
         StringBuilder additionalMsg = new StringBuilder();
         additionalMsg.append( "\n\n" );
         additionalMsg.append( "request: "+method.getURI() );
-        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, respBody, charset, httpStatus):null;
-        SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
+        byte[] rawPayload = IOUtils.toByteArray(respBody);
+        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, new ByteArrayInputStream(rawPayload), charset, httpStatus, false):null;
+        SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload, rawPayload);
         throw ex;
       }
 
@@ -555,7 +557,7 @@ public class HttpSolrClient extends SolrClient {
       }
       
       success = true;
-      return getProcessedResponse(processor, respBody, charset, httpStatus);
+      return getProcessedResponse(processor, respBody, charset, httpStatus, true);
     } catch (ConnectException e) {
       throw new SolrServerException("Server refused connection at: "
           + getBaseURL(), e);
@@ -627,12 +629,18 @@ public class HttpSolrClient extends SolrClient {
     return nonPreemptive && (contextCredentials || httpClientCredentials);
   }
   
-  private NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset, int httpStatus) {
+  private NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset, int httpStatus, boolean throwExceptioOnProcessError) {
     try {
       return processor.processResponse(respBody, charset);
     } catch (Exception e) {
-      if (e instanceof SolrException) throw (SolrException)e;
-      throw new SolrExceptionCausedByException(ErrorCode.getErrorCode(httpStatus), e.getMessage(), e);
+      if (throwExceptioOnProcessError) {
+        if (e instanceof SolrException) throw (SolrException)e;
+        throw new SolrExceptionCausedByException(ErrorCode.getErrorCode(httpStatus), e.getMessage(), e);
+      } else {
+        NamedList<Object> result = new NamedList<Object>();
+        result.add("processException", e);
+        return result;
+      }
     }
   }
   

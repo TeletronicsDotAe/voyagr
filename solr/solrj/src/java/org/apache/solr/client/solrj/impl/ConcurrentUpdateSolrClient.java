@@ -248,7 +248,7 @@ public class ConcurrentUpdateSolrClient extends SolrClient {
               StringBuilder additionalMsg = new StringBuilder();
               additionalMsg.append( "\n\n" );
               additionalMsg.append( "request: "+method.getURI() );
-              SolrException solrExc = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), null);
+              SolrException solrExc = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), null, null);
 
               handleError(solrExc);
             } else {

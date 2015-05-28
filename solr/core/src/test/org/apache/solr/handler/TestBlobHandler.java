@@ -23,6 +23,8 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -37,6 +39,7 @@ import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.core.ConfigOverlay;
 import org.apache.solr.update.DirectUpdateHandler2;
+import org.apache.solr.util.RestTestHarness;
 import org.apache.solr.util.SimplePostTool;
 import org.junit.Test;
 import org.noggit.JSONParser;
@@ -160,12 +163,12 @@ public class TestBlobHandler extends AbstractFullDistribZkTestBase {
     HttpClient httpClient = cloudClient.getLbClient().getHttpClient();
 
     HttpGet httpGet = new HttpGet(url);
-    HttpResponse entity = httpClient.execute(httpGet);
-    ByteBuffer b = SimplePostTool.inputStreamToByteArray(entity.getEntity().getContent());
+    final HttpContext context = RestTestHarness.getHttpContextForRequest(httpGet, url);
+    byte[] b = RestTestHarness.getRawResponse((CloseableHttpClient)httpClient, httpGet, context);
     try {
-      assertEquals(b.limit(), bytarr.length);
+      assertEquals(b.length, bytarr.length);
       for (int i = 0; i < bytarr.length; i++) {
-        assertEquals(b.get(i), bytarr[i]);
+        assertEquals(b[i], bytarr[i]);
       }
     } finally {
       httpGet.releaseConnection();
