@@ -43,7 +43,9 @@ import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.SolrConfig;
 import org.apache.solr.core.SolrResourceLoader;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.rest.schema.FieldTypeXmlAdapter;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.solr.util.FileUtils;
 import org.apache.zookeeper.CreateMode;
@@ -215,8 +217,11 @@ public final class ManagedIndexSchema extends IndexSchema {
 
     // get a list of active replica cores to query for the schema zk version (skipping this core of course)
     List<GetZkSchemaVersionCallable> concurrentTasks = new ArrayList<>();
-    for (String coreUrl : getActiveReplicaCoreUrls(zkController, collection, localCoreNodeName))
-      concurrentTasks.add(new GetZkSchemaVersionCallable(coreUrl, schemaZkVersion));
+    for (String coreUrl : getActiveReplicaCoreUrls(zkController, collection, localCoreNodeName)) {
+      GetZkSchemaVersionCallable req = new GetZkSchemaVersionCallable(coreUrl, schemaZkVersion);
+      req.setAuthCredentials(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(SolrRequestInfo.getRequestInfo().getReq()).getAuthCredentials());
+      concurrentTasks.add(req);
+    }
     if (concurrentTasks.isEmpty())
       return; // nothing to wait for ...
 
