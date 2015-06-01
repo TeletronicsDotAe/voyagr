@@ -55,6 +55,7 @@ import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.logging.MDCUtils;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.UpdateLog;
 import org.apache.solr.update.UpdateShardHandler;
 
@@ -1645,6 +1646,7 @@ public final class ZkController {
           prepCmd.setNodeName(getNodeName());
           prepCmd.setCoreNodeName(coreZkNodeName);
           prepCmd.setState(ZkStateReader.DOWN);
+          prepCmd.setAuthCredentials(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
           
           // let's retry a couple times - perhaps the leader just went down,
           // or perhaps he is just not quite ready for us yet
