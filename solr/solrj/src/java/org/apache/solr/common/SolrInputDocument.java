@@ -74,7 +74,8 @@ public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<S
     for( SolrInputField field : this ) {
       to.addField( field.getName(), field.getValue(), field.getBoost() );
     }
-    to.setDocumentBoost(this.getDocumentBoost());
+    to.setDocumentBoost(getDocumentBoost());
+    if (getChildDocuments() != null) to.addChildDocuments(getChildDocuments());
   }
 
 
