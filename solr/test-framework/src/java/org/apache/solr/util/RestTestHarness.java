@@ -37,14 +37,15 @@ import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.security.AuthCredentials;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
+import org.noggit.JSONParser;
+import org.noggit.ObjectBuilder;
 
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.StringReader;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -288,9 +289,7 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
   
   private static NamedList<Object> parseJSON(String JSON) {
     try {
-      ObjectMapper mapper = new ObjectMapper();
-      Map<String, Object> map = mapper.readValue(JSON, 
-          new TypeReference<HashMap<String,Object>>(){});
+      Map<String, Object> map = (Map)ObjectBuilder.getVal(new JSONParser(new StringReader(JSON)));
       return mapToNamedList(map);
     } catch (Exception e) {
       NamedList<Object> result = new NamedList<Object>();
