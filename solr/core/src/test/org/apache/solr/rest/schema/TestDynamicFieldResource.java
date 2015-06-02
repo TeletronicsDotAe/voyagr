@@ -16,6 +16,7 @@ package org.apache.solr.rest.schema;
  * limitations under the License.
  */
 
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.rest.SolrRestletTestBase;
 import org.junit.Test;
 
@@ -44,9 +45,7 @@ public class TestDynamicFieldResource extends SolrRestletTestBase {
   @Test
   public void testGetNotFoundDynamicField() throws Exception {
     assertQ("/schema/dynamicfields/*not_in_there?indent=on&wt=xml",
-            "count(/response/lst[@name='dynamicField']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field '*not_in_there' not found");
   } 
   
   @Test
@@ -73,6 +72,6 @@ public class TestDynamicFieldResource extends SolrRestletTestBase {
   public void testJsonPutFieldToNonMutableIndexSchema() throws Exception {
     assertJPut("/schema/dynamicfields/newfield_*",
         "{\"type\":\"text_general\", \"stored\":\"false\"}",
-        "/error/msg=='This IndexSchema is not mutable.'");
+        ErrorCode.BAD_REQUEST.code, "This IndexSchema is not mutable.");
   }
 }
