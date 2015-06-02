@@ -108,6 +108,10 @@ abstract public class RestTestBase extends SolrJettyTestBase {
    * @param request a URL path with optional query params, e.g. "/schema/fields?fl=id,_version_" 
    */
   public static void assertQ(String request, String... tests) {
+    assertQ(request, -1, null, tests);
+  }
+  
+  public static void assertQ(String request, int exceptionCode, String exceptionMsgContains, String... tests) {
     try {
       int queryStartPos = request.indexOf('?');
       String query;
@@ -124,7 +128,28 @@ abstract public class RestTestBase extends SolrJettyTestBase {
       }
       request = path + '?' + setParam(query, "indent", "on");
 
-      String response = restTestHarness.query(request);
+      String response;
+      try {
+        response = restTestHarness.query(request);
+        // exceptionCode > 0 means that a SolrException was expected
+        if (exceptionCode > 0) fail("SolrException with code " + exceptionCode + " and message containing '" + exceptionMsgContains + "' expected");
+      } catch (Exception e) {
+        log.info("REQUEST FAILED: " + request, e);
+        if (e instanceof SolrException) {
+          SolrException solrEx = (SolrException)e;
+          if (exceptionCode > 0) {
+            assertEquals(exceptionCode, solrEx.code());
+            assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+            // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
+            response = new String(solrEx.getRawPayload(), "UTF-8");
+          } else {
+            throw e;
+          }
+        } else {
+          throw e;
+        }
+      }
+
 
       // TODO: should the facet handling below be converted to parse the URL?
       /*
@@ -163,6 +188,10 @@ abstract public class RestTestBase extends SolrJettyTestBase {
    * @param request a URL path with optional query params, e.g. "/schema/fields?fl=id,_version_" 
    */
   public static String JQ(String request) throws Exception {
+    return JQ(request, -1, null);
+  }
+  
+  public static String JQ(String request, int exceptionCode, String exceptionMsgContains) throws Exception {
     int queryStartPos = request.indexOf('?');
     String query;
     String path;
@@ -177,13 +206,24 @@ abstract public class RestTestBase extends SolrJettyTestBase {
     request = path + '?' + setParam(query, "indent", "on"); 
 
     String response;
-    boolean failed=true;
     try {
       response = restTestHarness.query(request);
-      failed = false;
-    } finally {
-      if (failed) {
-        log.error("REQUEST FAILED: " + request);
+      // exceptionCode > 0 means that a SolrException was expected
+      if (exceptionCode > 0) fail("SolrException with code " + exceptionCode + " and message containing '" + exceptionMsgContains + "' expected");
+    } catch (Exception e) {
+      log.info("REQUEST FAILED: " + request, e);
+      if (e instanceof SolrException) {
+        SolrException solrEx = (SolrException)e;
+        if (exceptionCode > 0) {
+          assertEquals(exceptionCode, solrEx.code());
+          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
+          response = new String(solrEx.getRawPayload(), "UTF-8");
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
       }
     }
 
