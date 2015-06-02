@@ -16,6 +16,8 @@ package org.apache.solr.rest.schema;
  * limitations under the License.
  */
 
+import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.rest.SolrRestletTestBase;
 import org.junit.Test;
 
@@ -64,6 +66,6 @@ public class TestDynamicFieldCollectionResource extends SolrRestletTestBase {
   public void testJsonPostFieldsToNonMutableIndexSchema() throws Exception {
     assertJPost("/schema/dynamicfields",
         "[{\"name\":\"foobarbaz\", \"type\":\"text_general\", \"stored\":\"false\"}]",
-        "/error/msg=='This IndexSchema is not mutable.'");
+        ErrorCode.BAD_REQUEST.code, "This IndexSchema is not mutable.");
   }
 }
