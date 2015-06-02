@@ -16,6 +16,7 @@ package org.apache.solr.rest.schema;
  * limitations under the License.
  */
 
+import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.rest.SolrRestletTestBase;
 import org.junit.Test;
 
@@ -46,9 +47,7 @@ public class TestFieldResource extends SolrRestletTestBase {
   @Test
   public void testGetNotFoundField() throws Exception {
     assertQ("/schema/fields/not_in_there?indent=on&wt=xml",
-        "count(/response/lst[@name='field']) = 0",
-        "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-        "/response/lst[@name='error']/int[@name='code'] = '404'");
+        404, "Field 'not_in_there' not found");
   }
 
   @Test
@@ -99,13 +98,13 @@ public class TestFieldResource extends SolrRestletTestBase {
   public void testJsonPutFieldToNonMutableIndexSchema() throws Exception {
     assertJPut("/schema/fields/newfield",
         "{\"type\":\"text_general\", \"stored\":\"false\"}",
-        "/error/msg=='This IndexSchema is not mutable.'");
+        ErrorCode.BAD_REQUEST.code, "This IndexSchema is not mutable.");
   }
 
   @Test
   public void testJsonPostFieldsToNonMutableIndexSchema() throws Exception {
     assertJPost("/schema/fields",
         "[{\"name\":\"foobarbaz\", \"type\":\"text_general\", \"stored\":\"false\"}]",
-        "/error/msg=='This IndexSchema is not mutable.'");
+        ErrorCode.BAD_REQUEST.code, "This IndexSchema is not mutable.");
   }
 }
