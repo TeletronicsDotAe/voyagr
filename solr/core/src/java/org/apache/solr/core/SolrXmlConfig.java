@@ -366,7 +366,7 @@ public class SolrXmlConfig {
         case "zkACLProvider":
           builder.setZkACLProviderClass(value);
           break;
-        case "zkCredientialsProvider":
+        case "zkCredentialsProvider":
           builder.setZkCredentialsProviderClass(value);
           break;
         default:
