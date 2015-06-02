@@ -216,7 +216,7 @@ abstract public class RestTestBase extends SolrJettyTestBase {
         SolrException solrEx = (SolrException)e;
         if (exceptionCode > 0) {
           assertEquals(exceptionCode, solrEx.code());
-          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          assertTrue("'" + solrEx.getMessage() + "' does not contain '" + exceptionMsgContains + "'", solrEx.getMessage().contains(exceptionMsgContains));
           // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
           response = new String(solrEx.getRawPayload(), "UTF-8");
         } else {
@@ -286,7 +286,7 @@ abstract public class RestTestBase extends SolrJettyTestBase {
         SolrException solrEx = (SolrException)e;
         if (exceptionCode > 0) {
           assertEquals(exceptionCode, solrEx.code());
-          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          assertTrue("'" + solrEx.getMessage() + "' does not contain '" + exceptionMsgContains + "'", solrEx.getMessage().contains(exceptionMsgContains));
           // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
           response = new String(solrEx.getRawPayload(), "UTF-8");
         } else {
@@ -387,7 +387,7 @@ abstract public class RestTestBase extends SolrJettyTestBase {
         SolrException solrEx = (SolrException)e;
         if (exceptionCode > 0) {
           assertEquals(exceptionCode, solrEx.code());
-          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          assertTrue("'" + solrEx.getMessage() + "' does not contain '" + exceptionMsgContains + "'", solrEx.getMessage().contains(exceptionMsgContains));
           // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
           response = new String(solrEx.getRawPayload(), "UTF-8");
         } else {
@@ -486,7 +486,7 @@ abstract public class RestTestBase extends SolrJettyTestBase {
         SolrException solrEx = (SolrException)e;
         if (exceptionCode > 0) {
           assertEquals(exceptionCode, solrEx.code());
-          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          assertTrue("'" + solrEx.getMessage() + "' does not contain '" + exceptionMsgContains + "'", solrEx.getMessage().contains(exceptionMsgContains));
           // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
           response = new String(solrEx.getRawPayload(), "UTF-8");
         } else {
@@ -573,7 +573,7 @@ abstract public class RestTestBase extends SolrJettyTestBase {
         SolrException solrEx = (SolrException)e;
         if (exceptionCode > 0) {
           assertEquals(exceptionCode, solrEx.code());
-          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          assertTrue("'" + solrEx.getMessage() + "' does not contain '" + exceptionMsgContains + "'", solrEx.getMessage().contains(exceptionMsgContains));
           // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
           response = new String(solrEx.getRawPayload(), "UTF-8");
         } else {
