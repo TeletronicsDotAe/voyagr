@@ -73,29 +73,27 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
   public void testAddDynamicFieldBadFieldType() throws Exception {
     assertJPut("/schema/dynamicfields/*_newdynamicfield",
                json( "{'type':'not_in_there_at_all','stored':false}" ),
-               "/error/msg==\"Dynamic field \\'*_newdynamicfield\\': Field type \\'not_in_there_at_all\\' not found.\"");
+               400, "Dynamic field '*_newdynamicfield': Field type 'not_in_there_at_all' not found.");
   }
 
   @Test
   public void testAddDynamicFieldMismatchedName() throws Exception {
     assertJPut("/schema/dynamicfields/*_newdynamicfield",
                json( "{'name':'*_something_else','type':'text','stored':false}" ),
-               "/error/msg=='///regex:\\\\*_newdynamicfield///'");
+               400, "Dynamic field name in the request body '*_something_else' doesn't match dynamic field name in the request URL '*_newdynamicfield'");
   }
 
   @Test
   public void testAddDynamicFieldBadProperty() throws Exception {
     assertJPut("/schema/dynamicfields/*_newdynamicfield",
                json( "{'type':'text','no_property_with_this_name':false}" ),
-               "/error/msg==\"java.lang.IllegalArgumentException: Invalid field property: no_property_with_this_name\"");
+               400, "java.lang.IllegalArgumentException: Invalid field property: no_property_with_this_name");
   }
 
   @Test
   public void testAddDynamicField() throws Exception {
     assertQ("/schema/dynamicfields/newdynamicfield_*?indent=on&wt=xml",
-            "count(/response/lst[@name='newdynamicfield_*']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field 'newdynamicfield_*' not found.");
 
     assertJPut("/schema/dynamicfields/newdynamicfield_*",
                json("{'type':'text','stored':false}"),
@@ -118,9 +116,7 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
   @Test
   public void testAddDynamicFieldWithMulipleOptions() throws Exception {
     assertQ("/schema/dynamicfields/newdynamicfield_*?indent=on&wt=xml",
-            "count(/response/lst[@name='dynamicField']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field 'newdynamicfield_*' not found.");
 
     assertJPut("/schema/dynamicfields/newdynamicfield_*",
                json("{'type':'text_en','stored':true,'indexed':false}"),
@@ -146,9 +142,7 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
     assertU(commit());
 
     assertQ("/schema/dynamicfields/newdynamicfield2_*?indent=on&wt=xml",
-            "count(/response/lst[@name='dynamicField']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field 'newdynamicfield2_*' not found.");
 
     assertJPut("/schema/dynamicfields/newdynamicfield2_*",
                json("{'type':'text_en','stored':true,'indexed':true,'multiValued':true}"),
@@ -234,9 +228,7 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
   @Test
   public void testAddCopyField() throws Exception {
     assertQ("/schema/dynamicfields/newdynamicfield2_*?indent=on&wt=xml",
-            "count(/response/lst[@name='dynamicField']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field 'newdynamicfield2_*' not found.");
 
     assertJPut("/schema/dynamicfields/dynamicfieldA_*",
                json("{'type':'text','stored':false}"),
@@ -262,20 +254,16 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
     //some bad usages
     assertJPut("/schema/dynamicfields/dynamicfieldF_*",
                json("{'type':'text','stored':false, 'copyFields':['some_nonexistent_dynamicfield_ignore_exception_*']}"),
-               "/error/msg==\"copyField dest :\\'some_nonexistent_dynamicfield_ignore_exception_*\\' is not an explicit field and doesn\\'t match a dynamicField.\"");
+               500, "copyField dest :'some_nonexistent_dynamicfield_ignore_exception_*' is not an explicit field and doesn't match a dynamicField.");
   }
 
   @Test
   public void testPostMultipleDynamicFields() throws Exception {
     assertQ("/schema/dynamicfields/newdynamicfield1_*?indent=on&wt=xml",
-            "count(/response/lst[@name='dynamicField']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field 'newdynamicfield1_*' not found.");
 
     assertQ("/schema/dynamicfields/newdynamicfield2_*?indent=on&wt=xml",
-            "count(/response/lst[@name='dynamicField']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Dynamic field 'newdynamicfield2_*' not found.");
 
     assertJPost("/schema/dynamicfields",
                 json( "[{'name':'newdynamicfield1_*','type':'text','stored':false},"
@@ -335,7 +323,7 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
                 json( "[{'name':'dynamicfieldH_*','type':'text','stored':false},"
                     + " {'name':'dynamicfieldI_*','type':'text','stored':false},"
                     + " {'name':'dynamicfieldJ_*','type':'text','stored':false, 'copyFields':['some_nonexistent_dynamicfield_ignore_exception_*']}]"),
-                "/error/msg=='copyField dest :\\'some_nonexistent_dynamicfield_ignore_exception_*\\' is not an explicit field and doesn\\'t match a dynamicField.'");
+                500, "copyField dest :'some_nonexistent_dynamicfield_ignore_exception_*' is not an explicit field and doesn't match a dynamicField.");
   }
 
   @Test
@@ -361,7 +349,7 @@ public class TestManagedSchemaDynamicFieldResource extends RestTestBase {
                 "/responseHeader/status==0");
     assertJPost("/schema/copyfields",
                 json("[{'source':'dynamicfieldD_*', 'dest':['some_nonexistent_dynamicfield_ignore_exception_*']}]"),
-                "/error/msg=='copyField dest :\\'some_nonexistent_dynamicfield_ignore_exception_*\\' is not an explicit field and doesn\\'t match a dynamicField.'");
+                500, "copyField dest :'some_nonexistent_dynamicfield_ignore_exception_*' is not an explicit field and doesn't match a dynamicField.");
   }
 }
 
