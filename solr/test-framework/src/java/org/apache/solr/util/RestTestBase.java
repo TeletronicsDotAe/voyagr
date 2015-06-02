@@ -214,6 +214,14 @@ abstract public class RestTestBase extends SolrJettyTestBase {
    * @param tests JSON path expression + '==' + expected value
    */
   public static void assertJQ(String request, double delta, String... tests) throws Exception {
+    assertJQ(request, delta, -1, null, tests);
+  }
+  
+  public static void assertJQ(String request, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
+    assertJQ(request, JSONTestUtil.DEFAULT_DELTA, exceptionCode, exceptionMsgContains, tests);
+  }
+  
+  public static void assertJQ(String request, double delta, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
     int queryStartPos = request.indexOf('?');
     String query;
     String path;
@@ -228,22 +236,34 @@ abstract public class RestTestBase extends SolrJettyTestBase {
     request = path + '?' + setParam(query, "indent", "on");
 
     String response;
-    boolean failed = true;
     try {
       response = restTestHarness.query(request);
-      failed = false;
-    } finally {
-      if (failed) {
-        log.error("REQUEST FAILED: " + request);
+      // exceptionCode > 0 means that a SolrException was expected
+      if (exceptionCode > 0) fail("SolrException with code " + exceptionCode + " and message containing '" + exceptionMsgContains + "' expected");
+    } catch (Exception e) {
+      log.info("REQUEST FAILED: " + request, e);
+      if (e instanceof SolrException) {
+        SolrException solrEx = (SolrException)e;
+        if (exceptionCode > 0) {
+          assertEquals(exceptionCode, solrEx.code());
+          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
+          response = new String(solrEx.getRawPayload(), "UTF-8");
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
       }
     }
 
+    boolean failed;
     for (String test : tests) {
       if (null == test || 0 == test.length()) continue;
       String testJSON = json(test);
 
+      failed = true;
       try {
-        failed = true;
         String err = JSONTestUtil.match(response, testJSON, delta);
         failed = false;
         if (err != null) {
@@ -295,6 +315,14 @@ abstract public class RestTestBase extends SolrJettyTestBase {
    * @param tests JSON path expression + '==' + expected value
    */
   public static void assertJPut(String request, String content, double delta, String... tests) throws Exception {
+    assertJPut(request, content, delta, -1, null, tests);
+  }
+  
+  public static void assertJPut(String request, String content, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
+    assertJPut(request, content, JSONTestUtil.DEFAULT_DELTA, exceptionCode, exceptionMsgContains, tests);
+  }
+  
+  public static void assertJPut(String request, String content, double delta, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
     int queryStartPos = request.indexOf('?');
     String query;
     String path;
@@ -309,22 +337,34 @@ abstract public class RestTestBase extends SolrJettyTestBase {
     request = path + '?' + setParam(query, "indent", "on");
 
     String response;
-    boolean failed = true;
     try {
       response = restTestHarness.put(request, content);
-      failed = false;
-    } finally {
-      if (failed) {
-        log.error("REQUEST FAILED: " + request);
+      // exceptionCode > 0 means that a SolrException was expected
+      if (exceptionCode > 0) fail("SolrException with code " + exceptionCode + " and message containing '" + exceptionMsgContains + "' expected");
+    } catch (Exception e) {
+      log.info("REQUEST FAILED: " + request, e);
+      if (e instanceof SolrException) {
+        SolrException solrEx = (SolrException)e;
+        if (exceptionCode > 0) {
+          assertEquals(exceptionCode, solrEx.code());
+          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
+          response = new String(solrEx.getRawPayload(), "UTF-8");
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
       }
     }
 
+    boolean failed;
     for (String test : tests) {
       if (null == test || 0 == test.length()) continue;
       String testJSON = json(test);
 
+      failed = true;
       try {
-        failed = true;
         String err = JSONTestUtil.match(response, testJSON, delta);
         failed = false;
         if (err != null) {
@@ -374,6 +414,14 @@ abstract public class RestTestBase extends SolrJettyTestBase {
    * @param tests JSON path expression + '==' + expected value
    */
   public static void assertJPost(String request, String content, double delta, String... tests) throws Exception {
+    assertJPost(request, content, delta, -1, null, tests);
+  }
+  
+  public static void assertJPost(String request, String content, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
+    assertJPost(request, content, JSONTestUtil.DEFAULT_DELTA, exceptionCode, exceptionMsgContains, tests);
+  }
+  
+  public static void assertJPost(String request, String content, double delta, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
     int queryStartPos = request.indexOf('?');
     String query;
     String path;
@@ -388,22 +436,34 @@ abstract public class RestTestBase extends SolrJettyTestBase {
     request = path + '?' + setParam(query, "indent", "on");
 
     String response;
-    boolean failed = true;
     try {
       response = restTestHarness.post(request, content);
-      failed = false;
-    } finally {
-      if (failed) {
-        log.error("REQUEST FAILED: " + request);
+      // exceptionCode > 0 means that a SolrException was expected
+      if (exceptionCode > 0) fail("SolrException with code " + exceptionCode + " and message containing '" + exceptionMsgContains + "' expected");
+    } catch (Exception e) {
+      log.info("REQUEST FAILED: " + request, e);
+      if (e instanceof SolrException) {
+        SolrException solrEx = (SolrException)e;
+        if (exceptionCode > 0) {
+          assertEquals(exceptionCode, solrEx.code());
+          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
+          response = new String(solrEx.getRawPayload(), "UTF-8");
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
       }
     }
 
+    boolean failed;
     for (String test : tests) {
       if (null == test || 0 == test.length()) continue;
       String testJSON = json(test);
-
+      
+      failed = true;
       try {
-        failed = true;
         String err = JSONTestUtil.match(response, testJSON, delta);
         failed = false;
         if (err != null) {
@@ -441,6 +501,14 @@ abstract public class RestTestBase extends SolrJettyTestBase {
    * response using the specified double delta tolerance.
    */
   public static void assertJDelete(String request, double delta, String... tests) throws Exception {
+    assertJDelete(request, delta, -1, null, tests);
+  }
+  
+  public static void assertJDelete(String request, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
+    assertJDelete(request, JSONTestUtil.DEFAULT_DELTA, exceptionCode, exceptionMsgContains, tests);
+  }
+  
+  public static void assertJDelete(String request, double delta, int exceptionCode, String exceptionMsgContains, String... tests) throws Exception {
     int queryStartPos = request.indexOf('?');
     String query;
     String path;
@@ -455,22 +523,34 @@ abstract public class RestTestBase extends SolrJettyTestBase {
     request = path + '?' + setParam(query, "indent", "on");
 
     String response;
-    boolean failed = true;
     try {
       response = restTestHarness.delete(request);
-      failed = false;
-    } finally {
-      if (failed) {
-        log.error("REQUEST FAILED: " + request);
+      // exceptionCode > 0 means that a SolrException was expected
+      if (exceptionCode > 0) fail("SolrException with code " + exceptionCode + " and message containing '" + exceptionMsgContains + "' expected");
+    } catch (Exception e) {
+      log.info("REQUEST FAILED: " + request, e);
+      if (e instanceof SolrException) {
+        SolrException solrEx = (SolrException)e;
+        if (exceptionCode > 0) {
+          assertEquals(exceptionCode, solrEx.code());
+          assertTrue(solrEx.getMessage().contains(exceptionMsgContains));
+          // If the exception is as expected, do not throw it. Set response to the payload - it is still worth matching tests at
+          response = new String(solrEx.getRawPayload(), "UTF-8");
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
       }
     }
 
+    boolean failed;
     for (String test : tests) {
       if (null == test || 0 == test.length()) continue;
       String testJSON = json(test);
-
+      
+      failed = true;
       try {
-        failed = true;
         String err = JSONTestUtil.match(response, testJSON, delta);
         failed = false;
         if (err != null) {
