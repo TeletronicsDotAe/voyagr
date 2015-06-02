@@ -79,17 +79,17 @@ public class TestManagedSchemaFieldTypeResource extends RestTestBase {
     // name mismatch
     assertJPut("/schema/fieldtypes/myIntFieldType",
         json("{'name':'badNameEh','class':'solr.TrieIntField','stored':false}"),
-        "/responseHeader/status==400");    
+        400, "Field type name in the request body 'badNameEh' doesn't match field type name in the request URL 'myIntFieldType'");    
     
     // no class
     assertJPut("/schema/fieldtypes/myIntFieldType",
         json("{'stored':false}"),
-        "/responseHeader/status==400");
+        400, "Missing required 'class' property!");
     
     // invalid attribute
     assertJPut("/schema/fieldtypes/myIntFieldType",
         json("{'foo':'bar'}"),
-        "/responseHeader/status==400");
+        400, "Missing required 'class' property!");
     
     // empty analyzer
     String ftdef = "";
@@ -99,7 +99,7 @@ public class TestManagedSchemaFieldTypeResource extends RestTestBase {
     ftdef += "}";    
     assertJPut("/schema/fieldtypes/emptyAnalyzerFieldType",
         json(ftdef),
-        "/responseHeader/status==400");
+        400, "Invalid fieldType definition! Expected JSON object for analyzer not a java.lang.String");
 
     // basic field types
     assertJPut("/schema/fieldtypes/myIntFieldType",
@@ -225,7 +225,8 @@ public class TestManagedSchemaFieldTypeResource extends RestTestBase {
         "/response/lst[@name='responseHeader']/int[@name='status'] = '0'");
 
     // try to delete the managed synonyms endpoint, which should fail because it is being used
-    assertJDelete(piglatinSynonymEndpoint, "/responseHeader/status==403");
+    assertJDelete(piglatinSynonymEndpoint, 
+                  403, "Cannot delete managed resource /schema/analysis/synonyms/piglatin as it is being used by 2 Solr components");
     
     // test adding multiple field types at once
     ftdef = "[";
