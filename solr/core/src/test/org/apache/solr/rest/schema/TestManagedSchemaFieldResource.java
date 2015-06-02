@@ -73,29 +73,27 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
   public void testAddFieldBadFieldType() throws Exception {
     assertJPut("/schema/fields/newfield",
         json( "{'type':'not_in_there_at_all','stored':false}" ),
-        "/error/msg==\"Field \\'newfield\\': Field type \\'not_in_there_at_all\\' not found.\"");
+        400, "Field 'newfield': Field type 'not_in_there_at_all' not found.");
   }
 
   @Test
   public void testAddFieldMismatchedName() throws Exception {
     assertJPut("/schema/fields/newfield",
         json( "{'name':'something_else','type':'text','stored':false}" ),
-        "/error/msg=='///regex:newfield///'");
+        400, "Field name in the request body 'something_else' doesn't match field name in the request URL 'newfield'");
   }
   
   @Test
   public void testAddFieldBadProperty() throws Exception {
     assertJPut("/schema/fields/newfield",
                json( "{'type':'text','no_property_with_this_name':false}" ),
-               "/error/msg==\"java.lang.IllegalArgumentException: Invalid field property: no_property_with_this_name\"");
+               400, "java.lang.IllegalArgumentException: Invalid field property: no_property_with_this_name");
   }
   
   @Test
   public void testAddField() throws Exception {
     assertQ("/schema/fields/newfield?indent=on&wt=xml",
-            "count(/response/lst[@name='field']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Field 'newfield' not found.");
     
     assertJPut("/schema/fields/newfield",
                json("{'type':'text','stored':false}"),
@@ -118,9 +116,7 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
   @Test
   public void testAddFieldWithMulipleOptions() throws Exception {
     assertQ("/schema/fields/newfield?indent=on&wt=xml",
-            "count(/response/lst[@name='field']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Field 'newfield' not found.");
 
     assertJPut("/schema/fields/newfield",
                json("{'type':'text_en','stored':true,'indexed':false}"),
@@ -146,9 +142,7 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
     assertU(commit());
 
     assertQ("/schema/fields/newfield2?indent=on&wt=xml",
-            "count(/response/lst[@name='field']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Field 'newfield2' not found.");
 
     assertJPut("/schema/fields/newfield2",
                json("{'type':'text_en','stored':true,'indexed':true,'multiValued':true}"),
@@ -234,9 +228,7 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
   @Test
   public void testAddCopyField() throws Exception {
     assertQ("/schema/fields/newfield2?indent=on&wt=xml",
-            "count(/response/lst[@name='field']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Field 'newfield2' not found.");
 
     assertJPut("/schema/fields/fieldA", 
                json("{'type':'text','stored':false}"),
@@ -264,20 +256,16 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
     //some bad usages
     assertJPut("/schema/fields/fieldF",
                json("{'type':'text','stored':false, 'copyFields':['some_nonexistent_field_ignore_exception']}"),
-               "/error/msg==\"copyField dest :\\'some_nonexistent_field_ignore_exception\\' is not an explicit field and doesn\\'t match a dynamicField.\"");
+               500, "copyField dest :'some_nonexistent_field_ignore_exception' is not an explicit field and doesn't match a dynamicField.");
   }
 
   @Test
   public void testPostMultipleFields() throws Exception {
     assertQ("/schema/fields/newfield1?indent=on&wt=xml",
-            "count(/response/lst[@name='field']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Field 'newfield1' not found.");
 
     assertQ("/schema/fields/newfield2?indent=on&wt=xml",
-            "count(/response/lst[@name='field']) = 0",
-            "/response/lst[@name='responseHeader']/int[@name='status'] = '404'",
-            "/response/lst[@name='error']/int[@name='code'] = '404'");
+            404, "Field 'newfield2' not found.");
 
     assertJPost("/schema/fields",
                 json( "[{'name':'newfield1','type':'text','stored':false},"
@@ -339,7 +327,7 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
                 json( "[{'name':'fieldH','type':'text','stored':false},"
                     + " {'name':'fieldI','type':'text','stored':false},"
                     + " {'name':'fieldJ','type':'text','stored':false, 'copyFields':['some_nonexistent_field_ignore_exception']}]"),
-                "/error/msg=='copyField dest :\\'some_nonexistent_field_ignore_exception\\' is not an explicit field and doesn\\'t match a dynamicField.'");
+                500, "copyField dest :'some_nonexistent_field_ignore_exception' is not an explicit field and doesn't match a dynamicField.");
   }
 
   @Test
@@ -361,10 +349,10 @@ public class TestManagedSchemaFieldResource extends RestTestBase {
         "count(/response/arr[@name='copyFields']/lst) = 2");
     assertJPost("/schema/copyfields", 
                 json("[{'source':'some_nonexistent_field_ignore_exception', 'dest':['fieldA']}]"),
-                "/error/msg=='copyField source :\\'some_nonexistent_field_ignore_exception\\' is not a glob and doesn\\'t match any explicit field or dynamicField.'");
+                500, "copyField source :'some_nonexistent_field_ignore_exception' is not a glob and doesn't match any explicit field or dynamicField.");
     assertJPost("/schema/copyfields", 
                 json("[{'source':'fieldD', 'dest':['some_nonexistent_field_ignore_exception']}]"),
-                "/error/msg=='copyField dest :\\'some_nonexistent_field_ignore_exception\\' is not an explicit field and doesn\\'t match a dynamicField.'");
+                500, "copyField dest :'some_nonexistent_field_ignore_exception' is not an explicit field and doesn't match a dynamicField.");
   }
 }
 
