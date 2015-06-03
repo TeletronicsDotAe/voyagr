@@ -64,9 +64,10 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
     assertNotNull("No Chain named: " + chain, pc);
 
     SolrQueryResponse rsp = new SolrQueryResponse();
+
     SolrQueryRequest req = new LocalSolrQueryRequest(core, requestParams);
-    SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
     try {
+      SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
       AddUpdateCommand cmd = new AddUpdateCommand(req);
       cmd.solrDoc = docIn;
 
@@ -77,7 +78,7 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
         processor.processAdd(cmd);
       }
       } finally {
-        processor.finish();
+        if (null != processor) processor.finish();
       }
 
       return cmd.solrDoc;
