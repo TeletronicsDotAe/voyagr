@@ -496,7 +496,7 @@ public class TestIndexSearcher extends SolrTestCaseJ4 {
     try {
       sr = req("q", "Hello");
 
-      // Wrapping the AtomicReaders underneath the SolrIndexSearcher with a counting wrapper, so that we can assert
+      // Wrapping the LeafReaders underneath the SolrIndexSearcher with a counting wrapper, so that we can assert
       // on how many calls have been made to them
 
       wrapper = new SolrIndexSearcherTestWrapper<>(sr.getSearcher(), CountingWrapper.getFactory());
@@ -513,18 +513,18 @@ public class TestIndexSearcher extends SolrTestCaseJ4 {
       // Asking for fields ...
       doc = sr.getSearcher().doc(0, new HashSet<>(Arrays.asList("*")));
       // ... should return the fields ...
-      assertEquals(9, doc.getFields().size());
+      assertEquals(7, doc.getFields().size());
       // ... and have to access the store
       assertEquals(1, CountingWrapper.getTotalDocumentCountAndReset(wrapper.getWrappers()));
 
       // Asking for score only again ...
       doc = sr.getSearcher().doc(0, new HashSet<>(Arrays.asList(SolrReturnFields.SCORE)));
       // ... happens to return the fields, because doc is in cache ...
-      assertEquals(9, doc.getFields().size());
+      assertEquals(7, doc.getFields().size());
       // ... but should not access the store (because it is in the cache)
       assertEquals(0, CountingWrapper.getTotalDocumentCountAndReset(wrapper.getWrappers()));
     } finally {
-      // Rolling back back to the original AtomicReaders 
+      // Rolling back back to the original LeafReaders 
       if (wrapper != null) {
         wrapper.unwrap();
       }
