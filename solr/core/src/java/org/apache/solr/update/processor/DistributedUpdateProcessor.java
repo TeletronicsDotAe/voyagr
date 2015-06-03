@@ -1108,6 +1108,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
           } else {
             // The leader forwarded us this update.
             cmd.setVersion(versionOnUpdate);
+            cmd.setRequestVersion(versionOnUpdate);
 
             if (ulog.getState() != UpdateLog.State.ACTIVE && (cmd.getFlags() & UpdateCommand.REPLAY) == 0) {
               // we're not in an active state, and this update isn't from a replay, so buffer it.
@@ -1394,12 +1395,14 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
       if (versionsStored) {
         if (leaderLogic) {
           long version = vinfo.getNewClock();
+          cmd.setRequestVersion(cmd.getVersion());
           cmd.setVersion(-version);
           // TODO update versions in all buckets
 
           doLocalDelete(cmd);
 
         } else {
+          cmd.setRequestVersion(cmd.getVersion());
           cmd.setVersion(-versionOnUpdate);
 
           if (ulog.getState() != UpdateLog.State.ACTIVE && (cmd.getFlags() & UpdateCommand.REPLAY) == 0) {
@@ -1586,9 +1589,11 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
 
             long version = vinfo.getNewClock();
             cmd.setVersion(-version);
+            cmd.setRequestVersion(signedVersionOnUpdate);
             bucket.updateHighest(version);
           } else {
             cmd.setVersion(-versionOnUpdate);
+            cmd.setRequestVersion(versionOnUpdate);
 
             if (ulog.getState() != UpdateLog.State.ACTIVE && (cmd.getFlags() & UpdateCommand.REPLAY) == 0) {
               // we're not in an active state, and this update isn't from a replay, so buffer it.
