@@ -78,7 +78,11 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
         processor.processAdd(cmd);
       }
       } finally {
-        if (null != processor) processor.finish();
+        try {
+          if (null != processor) processor.finish();
+        } catch (Throwable t) {
+          // ignore, so that exception from processAdd is propagated
+        }
       }
 
       return cmd.solrDoc;
@@ -103,7 +107,11 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
       processor.processCommit(cmd);
     } finally {
       req.close();
-      processor.finish();
+      try {
+        processor.finish();
+      } catch (Throwable t) {
+        // ignore, so that exception from processCommit is propagated
+      }
     }
   }
 
@@ -123,7 +131,11 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
       processor.processDelete(cmd);
     } finally {
       req.close();
-      processor.finish();
+      try {
+        processor.finish();
+      } catch (Throwable t) {
+        // ignore, so that exception from processDelete is propagated
+      }
     }
   }
 
