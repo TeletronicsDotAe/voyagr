@@ -438,6 +438,7 @@ public class SolrRequestParserTest extends SolrTestCaseJ4 {
     HttpServletRequest request = createMock(HttpServletRequest.class);
     expect(request.getHeader("User-Agent")).andReturn(userAgent).anyTimes();
     expect(request.getHeader("Content-Length")).andReturn(null).anyTimes();
+    expect(request.getHeader("Authorization")).andReturn(null).anyTimes();
     expect(request.getRequestURI()).andReturn(uri).anyTimes();
     expect(request.getContentType()).andReturn(contentType).anyTimes();
     expect(request.getContentLength()).andReturn(contentLength).anyTimes();
