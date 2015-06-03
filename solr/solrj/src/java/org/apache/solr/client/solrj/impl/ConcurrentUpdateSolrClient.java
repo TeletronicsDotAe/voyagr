@@ -17,6 +17,7 @@
 
 package org.apache.solr.client.solrj.impl;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.HttpClient;
@@ -24,6 +25,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentProducer;
 import org.apache.http.entity.EntityTemplate;
 import org.apache.http.protocol.HttpContext;
+import org.apache.http.util.EntityUtils;
 import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -41,7 +43,9 @@ import org.apache.solr.common.util.SolrjNamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedList;
@@ -245,10 +249,16 @@ public class ConcurrentUpdateSolrClient extends SolrClient {
               msg.append("\n\n\n\n");
               msg.append("request: ").append(method.getURI());
               
-              StringBuilder additionalMsg = new StringBuilder();
-              additionalMsg.append( "\n\n" );
-              additionalMsg.append( "request: "+method.getURI() );
-              SolrException solrExc = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), null, null);
+              String charset = EntityUtils.getContentCharSet(response.getEntity());
+              // Read the contents
+              InputStream respBody = response.getEntity().getContent();
+              byte[] rawPayload = IOUtils.toByteArray(respBody);
+              ResponseParser responseParser = updateRequest.getResponseParser();
+              if (responseParser == null) {
+                responseParser = client.getParser();
+              }
+              NamedList<Object> payload = (response.getFirstHeader(HttpSolrClient.HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?HttpSolrClient.getProcessedResponse(responseParser, new ByteArrayInputStream(rawPayload), charset, statusCode, false):null;
+              SolrException solrExc = SolrException.decodeFromHttpMethod(response, "UTF-8", msg.toString(), payload, rawPayload);
 
               handleError(solrExc);
             } else {

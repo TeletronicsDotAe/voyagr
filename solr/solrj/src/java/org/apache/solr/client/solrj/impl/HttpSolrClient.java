@@ -629,7 +629,7 @@ public class HttpSolrClient extends SolrClient {
     return nonPreemptive && (contextCredentials || httpClientCredentials);
   }
   
-  private NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset, int httpStatus, boolean throwExceptioOnProcessError) {
+  public static NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset, int httpStatus, boolean throwExceptioOnProcessError) {
     try {
       return processor.processResponse(respBody, charset);
     } catch (Exception e) {
