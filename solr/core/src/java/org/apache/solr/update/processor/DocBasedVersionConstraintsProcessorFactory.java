@@ -403,22 +403,27 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
           return;
         }
         
+        boolean throwException = false;
         Exception e = null;
         try {
           cmd.setVersion(oldSolrVersion);  // use optimistic concurrency to ensure that the doc has not changed in the meantime
           super.processAdd(cmd);
           e = SolrRequestInfo.getRequestInfo().getRsp().getException();
         } catch (SolrException ex) {
+          throwException = true;
           e = ex;
         }
         
         if (e != null) {
           if (e instanceof SolrException) {
             // log.info ("##################### CONFLICT ADDING newDoc=" + newDoc + " newVersion=" + newVersion );
-            if (e instanceof DocumentUpdateBaseException) continue;   // if a version conflict, retry
-            throw (SolrException)e;  // rethrow
+            if (e instanceof DocumentUpdateBaseException) {
+              SolrRequestInfo.getRequestInfo().getRsp().setException(null);
+              continue;   // if a version conflict, retry
+            }
+            if (throwException) throw (SolrException)e;  // rethrow
           }
-          throw (e instanceof RuntimeException)?(RuntimeException)e:new RuntimeException(e);  // rethrow
+          if (throwException) throw (e instanceof RuntimeException)?(RuntimeException)e:new RuntimeException(e);  // rethrow
         } else {
           return;
         }
@@ -474,6 +479,7 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
           return;
         }
         
+        boolean throwException = false;
         Exception e = null;
         // :TODO: should this logic be split and driven by two params?
         //   - deleteVersionParam to do a version check
@@ -495,15 +501,19 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
           super.processAdd(newCmd);
           e = SolrRequestInfo.getRequestInfo().getRsp().getException();
         } catch (SolrException ex) {
+          throwException = true;
           e = ex;
         }
         
         if (e != null) {
           if (e instanceof SolrException) {
-            if (e instanceof DocumentUpdateBaseException) continue;   // if a version conflict, retry
-            throw (SolrException)e;  // rethrow
+            if (e instanceof DocumentUpdateBaseException) {
+              SolrRequestInfo.getRequestInfo().getRsp().setException(null);
+              continue;   // if a version conflict, retry
+            }
+            if (throwException) throw (SolrException)e;  // rethrow
           }
-          throw (e instanceof RuntimeException)?(RuntimeException)e:new RuntimeException(e);  // rethrow
+          if (throwException) throw (e instanceof RuntimeException)?(RuntimeException)e:new RuntimeException(e);  // rethrow
         } else {
           return;
         }
