@@ -104,13 +104,13 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
   
   private Set<AbstractAuthMethod> oldInternalAuthMethods;
 
-  private void modifyAllInternalAuthCrendtials(AuthCredentials newAuthCredentials) {
+  private void modifyAllInternalAuthCredentials(AuthCredentials newAuthCredentials) {
     AuthCredentials internalAuthCredentials = AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials();
     oldInternalAuthMethods = internalAuthCredentials.getAuthMethods();
     internalAuthCredentials.setAuthMethods(newAuthCredentials.getAuthMethods());
   }
   
-  private void revertModificationAllInternalAuthCrendtials() {
+  private void revertModificationAllInternalAuthCredentials() {
     AuthCredentials internalAuthCredentials = AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials();
     if (oldInternalAuthMethods != null) {
       internalAuthCredentials.setAuthMethods(oldInternalAuthMethods);
@@ -240,7 +240,7 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     checkForCollection("security_new_collection1", expectedShardsReplica, null);
     
     // Test unauthenticated user in sub-requests from Collection API to Core Admin API (creating the individual shards)
-    modifyAllInternalAuthCrendtials(AuthCredentials.createBasicAuthCredentials(ALL_USERNAME, ALL_PASSWORD + "wrong"));
+    modifyAllInternalAuthCredentials(AuthCredentials.createBasicAuthCredentials(ALL_USERNAME, ALL_PASSWORD + "wrong"));
     try {
       doAndAssertSolrExeption(ErrorCode.PRECONDITION_FAILED.code, 
           Arrays.asList(new Integer[]{ErrorCode.UNAUTHORIZED.code, ErrorCode.UNAUTHORIZED.code, ErrorCode.UNAUTHORIZED.code, ErrorCode.UNAUTHORIZED.code}), 
@@ -252,11 +252,11 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
             }
           });
     } finally {
-      revertModificationAllInternalAuthCrendtials();
+      revertModificationAllInternalAuthCredentials();
     }
 
     // Test authenticated but authorized user in sub-requests from Collection API to Core Admin API (creating the individual shards)
-    modifyAllInternalAuthCrendtials(SEARCH_CREDENTIALS);
+    modifyAllInternalAuthCredentials(SEARCH_CREDENTIALS);
     try {
       doAndAssertSolrExeption(ErrorCode.PRECONDITION_FAILED.code, 
           Arrays.asList(new Integer[]{ErrorCode.FORBIDDEN.code, ErrorCode.FORBIDDEN.code, ErrorCode.FORBIDDEN.code, ErrorCode.FORBIDDEN.code}),
@@ -268,11 +268,11 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
             }
           });
     } finally {
-      revertModificationAllInternalAuthCrendtials();
+      revertModificationAllInternalAuthCredentials();
     }
 
     // Test authenticated but unauthorized user in recovery-sub-requests (assuming authenticated will work the same way)
-    modifyAllInternalAuthCrendtials(AuthCredentials.createBasicAuthCredentials(ALL_USERNAME, ALL_PASSWORD + "wrong"));
+    modifyAllInternalAuthCredentials(AuthCredentials.createBasicAuthCredentials(ALL_USERNAME, ALL_PASSWORD + "wrong"));
     try {
       // shutdown replica
       JettySolrRunner replica = chaosMonkey.stopShard("shard1", 1).jetty;
@@ -300,7 +300,7 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
         fail("Expected that recovery would be unsuccessful with wrong internal credentials");
       }
     } finally {
-      revertModificationAllInternalAuthCrendtials();
+      revertModificationAllInternalAuthCredentials();
     }
     
     // Test unauthenticated delete on the internal solr-node-to-solr-node request, but authenticated and authorized on request from "outside"
