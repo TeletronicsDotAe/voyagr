@@ -1249,6 +1249,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
               : DistribPhase.TOLEADER.toString()));
       params.set(DISTRIB_FROM, ZkCoreNodeProps.getCoreUrl(
           zkController.getBaseUrl(), req.getCore().getName()));
+      params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
 
       cmdDistrib.distribDelete(cmd, nodes, params);
     }
