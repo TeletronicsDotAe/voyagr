@@ -1222,6 +1222,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
         params.set(DISTRIB_FROM, ZkCoreNodeProps.getCoreUrl(
             zkController.getBaseUrl(), req.getCore().getName()));
         params.set(DISTRIB_FROM_PARENT, cloudDesc.getShardId());
+        params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
         cmdDistrib.distribDelete(cmd, subShardLeaders, params, true);
       }
 
@@ -1233,6 +1234,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
             zkController.getBaseUrl(), req.getCore().getName()));
         params.set(DISTRIB_FROM_COLLECTION, req.getCore().getCoreDescriptor().getCloudDescriptor().getCollectionName());
         params.set(DISTRIB_FROM_SHARD, req.getCore().getCoreDescriptor().getCloudDescriptor().getShardId());
+        params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
         for (Node nodesByRoutingRule : nodesByRoutingRules) {
           cmdDistrib.distribDelete(cmd, Collections.singletonList(nodesByRoutingRule), params, true);
         }
