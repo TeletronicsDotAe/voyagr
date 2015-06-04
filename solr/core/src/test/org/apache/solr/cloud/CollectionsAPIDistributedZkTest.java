@@ -337,7 +337,7 @@ public class CollectionsAPIDistributedZkTest extends AbstractFullDistribZkTestBa
   private NamedList<Object> makeRequest(String baseUrl, SolrRequest request)
       throws SolrServerException, IOException {
     try (SolrClient client = createNewSolrClient("", baseUrl)) {
-      return client.request(request);
+      return request.process(client).getResponse();
     }
   }
 

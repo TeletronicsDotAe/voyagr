@@ -61,6 +61,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.ImmutableSet;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.SolrResponse;
@@ -92,6 +93,7 @@ import org.apache.solr.common.cloud.ZkConfigManager;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
+import org.apache.solr.common.exceptions.SolrExceptionCausedByException;
 import org.apache.solr.common.params.CollectionParams;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
@@ -646,12 +648,9 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
         SolrException.log(log, "Collection: " + collName + " operation: " + operation
             + " failed", e);
       }
-
-      results.add("Operation " + operation + " caused exception:", e);
-      SimpleOrderedMap nl = new SimpleOrderedMap();
-      nl.add("msg", e.getMessage());
-      nl.add("rspCode", e instanceof SolrException ? ((SolrException)e).code() : -1);
-      results.add("exception", nl);
+      
+      SolrException exceptionToThrow = (e instanceof SolrException)?((SolrException)e):(new SolrExceptionCausedByException(ErrorCode.UNKNOWN, e.getMessage()));
+      SolrResponse.addPartialError(null, results, "error", exceptionToThrow);
     }
     return new OverseerSolrResponse(results);
   }
@@ -2429,6 +2428,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
           sreq.purpose = 1;
           sreq.shards = new String[] {baseUrl};
           sreq.actualShards = sreq.shards;
+          sreq.nodeName = coreName;
           sreq.params = params;
 
           if(isLegacyCloud) {
@@ -2712,28 +2712,28 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
   }
 
   @SuppressWarnings("unchecked")
-  private void processResponse(NamedList results, Throwable e, String nodeName, SolrResponse solrResponse, String shard) {
+  private void processResponse(NamedList responseToBuild, Throwable e, String nodeName, SolrResponse subResponseToBuildFrom, String shard) {
+    String partRef = nodeName;
+    
     if (e != null) {
       log.error("Error from shard: " + shard, e);
-
-      SimpleOrderedMap failure = (SimpleOrderedMap) results.get("failure");
-      if (failure == null) {
-        failure = new SimpleOrderedMap();
-        results.add("failure", failure);
-      }
-
-      failure.add(nodeName, e.getClass().getName() + ":" + e.getMessage());
-
+      
+      ErrorCode errorCode = (e instanceof SolrException)?ErrorCode.getErrorCode(((SolrException)e).code()):ErrorCode.UNKNOWN;
+      SolrException partialError = (e instanceof SolrException)?((SolrException)e):new SolrExceptionCausedByException(errorCode, "Not able to perform sub-operation", e); 
+      
+      SolrResponse.addPartialError(null, responseToBuild, partRef, partialError);
     } else {
 
-      SimpleOrderedMap success = (SimpleOrderedMap) results.get("success");
+      SimpleOrderedMap success = (SimpleOrderedMap) responseToBuild.get("success");
       if (success == null) {
         success = new SimpleOrderedMap();
-        results.add("success", success);
+        responseToBuild.add("success", success);
       }
 
-      success.add(nodeName, solrResponse.getResponse());
+      success.add(nodeName, subResponseToBuildFrom.getResponse());
     }
+    
+    SolrResponse.addHandledPart(responseToBuild, partRef);
   }
 
   public boolean isClosed() {
@@ -2864,7 +2864,8 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
         }
 
         if(asyncId != null) {
-          if (response != null && (response.getResponse().get("failure") != null || response.getResponse().get("exception") != null)) {
+          Exception e = (response != null)?response.getException():null;
+          if (e != null) {
             failureMap.put(asyncId, null);
             log.debug("Updated failed map for task with zkid:[{}]", head.getId());
           } else {
@@ -2957,7 +2958,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
     private boolean isSuccessful() {
       if(response == null)
         return false;
-      return !(response.getResponse().get("failure") != null || response.getResponse().get("exception") != null);
+      return (response.getException() == null);
     }
   }
 

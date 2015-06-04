@@ -731,11 +731,6 @@ public class CollectionsHandler extends RequestHandlerBase {
     if (event.getBytes() != null) {
       SolrResponse response = SolrResponse.deserialize(event.getBytes());
       rsp.getValues().addAll(response.getResponse());
-      SimpleOrderedMap exp = (SimpleOrderedMap) response.getResponse().get("exception");
-      if (exp != null) {
-        Integer code = (Integer) exp.get("rspCode");
-        rsp.setException(new SolrException(code != null && code != -1 ? ErrorCode.getErrorCode(code) : ErrorCode.SERVER_ERROR, (String)exp.get("msg")));
-      }
     } else {
       if (System.nanoTime() - time >= TimeUnit.NANOSECONDS.convert(timeout, TimeUnit.MILLISECONDS)) {
         throw new SolrException(ErrorCode.SERVER_ERROR, operation

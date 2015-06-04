@@ -1665,10 +1665,10 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
     if (client == null) {
       final String baseUrl = getBaseUrl((HttpSolrClient) clients.get(clientIndex));
       try (SolrClient adminClient = createNewSolrClient("", baseUrl)) {
-        res.setResponse(adminClient.request(request));
+        res.setResponse(request.process(adminClient).getResponse());
       }
     } else {
-      res.setResponse(client.request(request));
+      res.setResponse(request.process(client).getResponse());
     }
     return res;
   }
