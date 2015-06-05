@@ -780,7 +780,7 @@ public class CloudSolrClient extends SolrClient {
       }
     }
     
-    SolrException exception = SolrResponse.getException(partsRefToPartialErrorMap, condensed);
+    SolrException exception = SolrResponse.getException(partsRefToPartialErrorMap, condensed, true);
     if (exception != null) throw exception;
     
     return condensed;

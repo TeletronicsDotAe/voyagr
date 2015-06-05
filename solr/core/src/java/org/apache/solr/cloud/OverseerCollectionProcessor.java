@@ -651,6 +651,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
       
       SolrException exceptionToThrow = (e instanceof SolrException)?((SolrException)e):(new SolrExceptionCausedByException(ErrorCode.UNKNOWN, e.getMessage()));
       SolrResponse.addPartialError(null, results, "error", exceptionToThrow);
+      SolrResponse.addHandledPart(results, "error");
     }
     return new OverseerSolrResponse(results);
   }
@@ -2864,7 +2865,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
         }
 
         if(asyncId != null) {
-          Exception e = (response != null)?response.getException():null;
+          Exception e = (response != null)?response.getException(false):null;
           if (e != null) {
             failureMap.put(asyncId, null);
             log.debug("Updated failed map for task with zkid:[{}]", head.getId());
@@ -2958,7 +2959,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
     private boolean isSuccessful() {
       if(response == null)
         return false;
-      return (response.getException() == null);
+      return (response.getException(false) == null);
     }
   }
 

@@ -181,7 +181,7 @@ public class SolrQueryResponse {
    */
   public Exception getException() {
   	if (err == null) {
-  	  err = SolrResponse.getException(partsRefToPartialErrorMap, getValues());
+  	  err = SolrResponse.getException(partsRefToPartialErrorMap, getValues(), true);
   	}
 
     return err;
