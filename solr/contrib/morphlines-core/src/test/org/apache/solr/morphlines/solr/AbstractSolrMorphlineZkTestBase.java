@@ -159,7 +159,8 @@ public abstract class AbstractSolrMorphlineZkTestBase extends AbstractFullDistri
       collection = "collection1";
     props.setProperty("collection", collection);
 
-    JettySolrRunner jetty = new JettySolrRunner(solrHome.getAbsolutePath(), props, buildJettyConfig(context), true);
+    // For now running without common-security set up, because morphline does not support providing credentials yet
+    JettySolrRunner jetty = new JettySolrRunner(solrHome.getAbsolutePath(), props, buildJettyConfig(context), false);
     jetty.start();
     
     return jetty;

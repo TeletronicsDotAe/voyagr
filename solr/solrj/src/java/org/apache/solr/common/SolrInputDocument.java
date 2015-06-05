@@ -85,6 +85,8 @@ public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<S
 
   public String getUniquePartRef()
   {
+    // Morphline tests is able to create SolrInputDocuments with null partImpl. Saving it here. Should do no harm
+    if (partImpl == null) partImpl = new RequestPartImpl();
   	return partImpl.getUniquePartRef();
   }
   
