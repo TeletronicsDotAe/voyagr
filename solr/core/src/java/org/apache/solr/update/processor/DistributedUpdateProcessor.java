@@ -1010,6 +1010,8 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
    * @throws IOException If there is a low-level I/O error.
    */
   private boolean versionAdd(AddUpdateCommand cmd) throws IOException {
+    long startTimeNanosec = System.nanoTime();
+    
     BytesRef idBytes = cmd.getIndexedId();
 
     if (idBytes == null) {
@@ -1146,7 +1148,12 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
         }
 
         // TODO: possibly set checkDeleteByQueries as a flag on the command?
-        doLocalAdd(cmd);
+        long doLocalAddStartTimeNanosec = System.nanoTime();
+        try {
+          doLocalAdd(cmd);
+        } finally {
+          updateStats.registerDoLocalAdd(doLocalAddStartTimeNanosec);
+        }
         
         if (willDistrib) {
           cmd.solrDoc = clonedDoc;
@@ -1155,6 +1162,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
       }  // end synchronized (bucket)
     } finally {
       vinfo.unlockForUpdate();
+      updateStats.registerVersionAdd(startTimeNanosec);
     }
     return false;
   }
@@ -1562,12 +1570,10 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
 
     VersionBucket bucket = vinfo.bucket(bucketHash);
 
-    long synchStartTimeNanosec = System.nanoTime();
     vinfo.lockForUpdate();
     try {
 
       synchronized (bucket) {
-        updateStats.registerSynch(synchStartTimeNanosec);
         if (versionsStored) {
           long bucketVersion = bucket.highest;
 
