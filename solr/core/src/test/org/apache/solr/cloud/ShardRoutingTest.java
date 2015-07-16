@@ -27,9 +27,6 @@ import org.apache.solr.common.params.ShardParams;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -213,7 +210,6 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
     doQuery("b!,c!doc1", "q","*:*");
     UpdateRequest req = new UpdateRequest();
     req.deleteById("b!");
-    req.setAuthCredentials(UPDATE_CREDENTIALS);
     req.process(cloudClient);
     commit();
     doQuery("c!doc1", "q","*:*");
@@ -251,18 +247,18 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
       }
   
       long nStart = getNumRequests();
-      leader.client.solrClient.add( sdoc("id","b!doc1"), -1, UPDATE_CREDENTIALS );
+      leader.client.solrClient.add( sdoc("id","b!doc1"));
       long nEnd = getNumRequests();
       assertEquals(2, nEnd - nStart);   // one request to leader, which makes another to a replica
   
   
       nStart = getNumRequests();
-      replica.client.solrClient.add( sdoc("id","b!doc1"), -1, UPDATE_CREDENTIALS );
+      replica.client.solrClient.add( sdoc("id","b!doc1"));
       nEnd = getNumRequests();
       assertEquals(3, nEnd - nStart);   // orig request + replica forwards to leader, which forward back to replica.
   
       nStart = getNumRequests();
-      replica.client.solrClient.add( sdoc("id","b!doc1"), -1, UPDATE_CREDENTIALS );
+      replica.client.solrClient.add( sdoc("id","b!doc1"));
       nEnd = getNumRequests();
       assertEquals(3, nEnd - nStart);   // orig request + replica forwards to leader, which forward back to replica.
   
@@ -319,7 +315,7 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
       expectedDistRequests = 0;
     }
     long nStart = getNumRequests();
-    runner.client.solrClient.query(params, SEARCH_CREDENTIALS);
+    runner.client.solrClient.query(params);
     long nEnd = getNumRequests();
     assertEquals("DQA " + dqaId, 1 + (expectedDistRequests*shards), nEnd - nStart);
   }
@@ -331,10 +327,10 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
 
     int expectedVal = 0;
     for (SolrClient client : clients) {
-      client.add(sdoc("id", "b!doc", "foo_i", map("inc",1)), -1, UPDATE_CREDENTIALS);
+      client.add(sdoc("id", "b!doc", "foo_i", map("inc",1)));
       expectedVal++;
 
-      QueryResponse rsp = client.query(params("qt","/get", "id","b!doc"), SEARCH_CREDENTIALS);
+      QueryResponse rsp = client.query(params("qt","/get", "id","b!doc"));
       Object val = ((Map)rsp.getResponse().get("doc")).get("foo_i");
       assertEquals((Integer)expectedVal, val);
     }
@@ -364,7 +360,6 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
     UpdateRequest req = new UpdateRequest();
     req.deleteByQuery(q);
     req.setParams(params(reqParams));
-    req.setAuthCredentials(UPDATE_CREDENTIALS);
     req.process(cloudClient);
   }
 

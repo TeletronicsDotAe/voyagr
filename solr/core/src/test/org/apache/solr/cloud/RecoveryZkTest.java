@@ -29,8 +29,6 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
-
 @Slow
 public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
 
@@ -127,8 +125,8 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
     
     SolrQuery query = new SolrQuery("*:*");
     query.setParam("distrib", "false");
-    long client1Docs = shardToJetty.get("shard1").get(0).client.solrClient.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
-    long client2Docs = shardToJetty.get("shard1").get(1).client.solrClient.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long client1Docs = shardToJetty.get("shard1").get(0).client.solrClient.query(query).getResults().getNumFound();
+    long client2Docs = shardToJetty.get("shard1").get(1).client.solrClient.query(query).getResults().getNumFound();
     
     assertTrue(client1Docs > 0);
     assertEquals(client1Docs, client2Docs);
@@ -140,14 +138,13 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
   @Override
   protected void indexDoc(SolrInputDocument doc) throws IOException,
       SolrServerException {
-    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
+    controlClient.add(doc);
     
     // UpdateRequest ureq = new UpdateRequest();
     // ureq.add(doc);
     // ureq.setParam("update.chain", DISTRIB_UPDATE_CHAIN);
-    // ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     // ureq.process(cloudClient);
-    cloudClient.add(doc, -1, UPDATE_CREDENTIALS);
+    cloudClient.add(doc);
   }
 
   
