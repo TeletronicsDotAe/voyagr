@@ -59,7 +59,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;;
 
 public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
   
@@ -167,7 +167,7 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     
     assertEquals(errors.toString(), 0, errors.size());
     
-    long numFound = controlClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
+    long numFound = controlClient.query(new SolrQuery("*:*")).getResults()
         .getNumFound();
     assertEquals(1, numFound);
     
@@ -206,11 +206,11 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     
     assertEquals(errors.toString(), 0, errors.size());
     
-    SolrDocumentList results = controlClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults();
+    SolrDocumentList results = controlClient.query(new SolrQuery("*:*")).getResults();
     numFound = results.getNumFound();
     assertEquals(results.toString(), 3, numFound);
     
-    numFound = client.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
+    numFound = client.query(new SolrQuery("*:*")).getResults()
         .getNumFound();
     assertEquals(3, numFound);
     
@@ -238,16 +238,16 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     assertEquals(errors.toString(), 0, errors.size());
     
     
-    results = controlClient.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults();
+    results = controlClient.query(new SolrQuery("*:*")).getResults();
     numFound = results.getNumFound();
     assertEquals(results.toString(), 2, numFound);
     
-    numFound = client.query(new SolrQuery("*:*"), SEARCH_CREDENTIALS).getResults()
+    numFound = client.query(new SolrQuery("*:*")).getResults()
         .getNumFound();
     assertEquals(results.toString(), 2, numFound);
     
     for (SolrClient c : clients) {
-      c.optimize(null, true, true, 1, UPDATE_CREDENTIALS);
+      c.optimize();
       //System.out.println(clients.get(0).request(new LukeRequest()));
     }
     
@@ -319,9 +319,7 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     assertEquals(getShardCount(), commits.get());
     
     for (SolrClient c : clients) {
-      LukeRequest req = new LukeRequest();
-      req.setAuthCredentials(ALL_CREDENTIALS);
-      NamedList<Object> resp = c.request(req);
+      NamedList<Object> resp = c.request(new LukeRequest());
       assertEquals("SOLR-3428: We only did adds - there should be no deletes",
           ((NamedList<Object>) resp.get("index")).get("numDocs"),
           ((NamedList<Object>) resp.get("index")).get("maxDoc"));
