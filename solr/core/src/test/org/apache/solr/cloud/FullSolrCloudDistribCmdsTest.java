@@ -42,8 +42,6 @@ import org.apache.zookeeper.CreateMode;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -87,11 +85,10 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     
     // two deletes
     uReq = new UpdateRequest();
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
     uReq.deleteById(Long.toString(docId-1));
     uReq.deleteById(Long.toString(docId-2)).process(cloudClient);
-    controlClient.deleteById(null, Long.toString(docId-1), -1, UPDATE_CREDENTIALS);
-    controlClient.deleteById(null, Long.toString(docId-2), -1, UPDATE_CREDENTIALS);
+    controlClient.deleteById(Long.toString(docId-1));
+    controlClient.deleteById(Long.toString(docId-2));
     
     commit();
     
@@ -113,15 +110,12 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     addFields(doc2, "id", docId++);
     uReq.add(doc2);
  
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
- 
     uReq.process(cloudClient);
     uReq.process(controlClient);
     
     uReq = new UpdateRequest();
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
     uReq.deleteById(Long.toString(docId - 2)).process(cloudClient);
-    controlClient.deleteById(null, Long.toString(docId - 2), -1, UPDATE_CREDENTIALS);
+    controlClient.deleteById(Long.toString(docId - 2));
     
     commit();
     
@@ -167,7 +161,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     createCollectionRequest.setShards("shard1,shard2");
     createCollectionRequest.setReplicationFactor(2);
     createCollectionRequest.setConfigName("conf1");
-    createCollectionRequest.setAuthCredentials(ALL_CREDENTIALS);
     response = createCollectionRequest.process(server);
 
     assertEquals(0, response.getStatus());
@@ -192,20 +185,20 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     doc.clear();
     doc.addField("id", "1");
     doc.addField("title", "s1 one");
-    shard1.add(doc, -1, UPDATE_CREDENTIALS);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.add(doc);
+    shard1.commit();
 
     doc.clear();
     doc.addField("id", "2");
     doc.addField("title", "s1 two");
-    shard1.add(doc, -1, UPDATE_CREDENTIALS);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.add(doc);
+    shard1.commit();
 
     doc.clear();
     doc.addField("id", "3");
     doc.addField("title", "s1 three");
-    shard1.add(doc, -1, UPDATE_CREDENTIALS);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.add(doc);
+    shard1.commit();
 
     docCounts1 = 3; // Three documents in shard1
 
@@ -213,29 +206,29 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     doc.clear();
     doc.addField("id", "4");
     doc.addField("title", "s2 four");
-    shard2.add(doc, -1, UPDATE_CREDENTIALS);
-    shard2.commit(UPDATE_CREDENTIALS);
+    shard2.add(doc);
+    shard2.commit();
 
     doc.clear();
     doc.addField("id", "5");
     doc.addField("title", "s2 five");
-    shard2.add(doc, -1, UPDATE_CREDENTIALS);
-    shard2.commit(UPDATE_CREDENTIALS);
+    shard2.add(doc);
+    shard2.commit();
 
     docCounts2 = 2; // Two documents in shard2
 
     // Verify the documents were added to correct shards
     ModifiableSolrParams query = new ModifiableSolrParams();
     query.set("q", "*:*");
-    QueryResponse respAll = shard1.query(query, SEARCH_CREDENTIALS);
+    QueryResponse respAll = shard1.query(query);
     assertEquals(docCounts1 + docCounts2, respAll.getResults().getNumFound());
 
     query.set("shards", "shard1");
-    QueryResponse resp1 = shard1.query(query, SEARCH_CREDENTIALS);
+    QueryResponse resp1 = shard1.query(query);
     assertEquals(docCounts1, resp1.getResults().getNumFound());
 
     query.set("shards", "shard2");
-    QueryResponse resp2 = shard2.query(query, SEARCH_CREDENTIALS);
+    QueryResponse resp2 = shard2.query(query);
     assertEquals(docCounts2, resp2.getResults().getNumFound());
 
 
@@ -243,22 +236,20 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     // Should delete.
     UpdateRequest deleteRequest = new UpdateRequest();
     deleteRequest.deleteById("4", "shard2");
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     shard1.request(deleteRequest);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.commit();
     query.set("shards", "shard2");
-    resp2 = shard2.query(query, SEARCH_CREDENTIALS);
+    resp2 = shard2.query(query);
     assertEquals(--docCounts2, resp2.getResults().getNumFound());
 
     // Delete a document in shard2 with update to shard1, without _route_ param
     // Shouldn't delete, since deleteById requests are not broadcast to all shard leaders.
     deleteRequest = new UpdateRequest();
     deleteRequest.deleteById("5");
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     shard1.request(deleteRequest);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.commit();
     query.set("shards", "shard2");
-    resp2 = shard2.query(query, SEARCH_CREDENTIALS);
+    resp2 = shard2.query(query);
     assertEquals(docCounts2, resp2.getResults().getNumFound());
 
     // Multiple deleteById commands in a single request
@@ -266,10 +257,9 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     deleteRequest.deleteById("2", "shard1");
     deleteRequest.deleteById("3", "shard1");
     deleteRequest.setCommitWithin(1);
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     query.set("shards", "shard1");
     shard2.request(deleteRequest);
-    resp1 = shard1.query(query, SEARCH_CREDENTIALS);
+    resp1 = shard1.query(query);
     --docCounts1;
     --docCounts1;
     assertEquals(docCounts1, resp1.getResults().getNumFound());
@@ -278,11 +268,10 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     deleteRequest.clear();
     deleteRequest.deleteById("1", "shard1");
     deleteRequest.setCommitWithin(1);
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     shard2.request(deleteRequest);
     Thread.sleep(1000);
     query.set("shards", "shard1");
-    resp1 = shard1.query(query, SEARCH_CREDENTIALS);
+    resp1 = shard1.query(query);
     assertEquals(--docCounts1, resp1.getResults().getNumFound());
   }
 
@@ -299,7 +288,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     createCollectionRequest.setShards("shard1,shard2");
     createCollectionRequest.setReplicationFactor(2);
     createCollectionRequest.setConfigName("conf1");
-    createCollectionRequest.setAuthCredentials(ALL_CREDENTIALS);
     response = createCollectionRequest.process(server);
 
     assertEquals(0, response.getStatus());
@@ -325,22 +313,22 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     doc.addField("id", "1");
     doc.addField("title", "s1 one");
     doc.addField("routefield_s", "europe");
-    shard1.add(doc, -1, UPDATE_CREDENTIALS);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.add(doc);
+    shard1.commit();
 
     doc.clear();
     doc.addField("id", "2");
     doc.addField("title", "s1 two");
     doc.addField("routefield_s", "europe");
-    shard1.add(doc, -1, UPDATE_CREDENTIALS);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.add(doc);
+    shard1.commit();
 
     doc.clear();
     doc.addField("id", "3");
     doc.addField("title", "s1 three");
     doc.addField("routefield_s", "europe");
-    shard1.add(doc, -1, UPDATE_CREDENTIALS);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.add(doc);
+    shard1.commit();
 
     docCounts1 = 3; // Three documents in shard1
 
@@ -349,30 +337,30 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     doc.addField("id", "4");
     doc.addField("title", "s2 four");
     doc.addField("routefield_s", "africa");
-    shard2.add(doc, -1, UPDATE_CREDENTIALS);
-    //shard2.commit(UPDATE_CREDENTIALS);
+    shard2.add(doc);
+    //shard2.commit();
 
     doc.clear();
     doc.addField("id", "5");
     doc.addField("title", "s2 five");
     doc.addField("routefield_s", "africa");
-    shard2.add(doc, -1, UPDATE_CREDENTIALS);
-    shard2.commit(UPDATE_CREDENTIALS);
+    shard2.add(doc);
+    shard2.commit();
 
     docCounts2 = 2; // Two documents in shard2
 
     // Verify the documents were added to correct shards
     ModifiableSolrParams query = new ModifiableSolrParams();
     query.set("q", "*:*");
-    QueryResponse respAll = shard1.query(query, SEARCH_CREDENTIALS);
+    QueryResponse respAll = shard1.query(query);
     assertEquals(docCounts1 + docCounts2, respAll.getResults().getNumFound());
 
     query.set("shards", "shard1");
-    QueryResponse resp1 = shard1.query(query, SEARCH_CREDENTIALS);
+    QueryResponse resp1 = shard1.query(query);
     assertEquals(docCounts1, resp1.getResults().getNumFound());
 
     query.set("shards", "shard2");
-    QueryResponse resp2 = shard2.query(query, SEARCH_CREDENTIALS);
+    QueryResponse resp2 = shard2.query(query);
     assertEquals(docCounts2, resp2.getResults().getNumFound());
 
     // Delete a document in shard2 with update to shard1, with _route_ param
@@ -380,12 +368,11 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     UpdateRequest deleteRequest = new UpdateRequest();
     deleteRequest.deleteById("4", "africa");
     deleteRequest.setCommitWithin(1);
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     shard1.request(deleteRequest);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.commit();
 
     query.set("shards", "shard2");
-    resp2 = shard2.query(query, SEARCH_CREDENTIALS);
+    resp2 = shard2.query(query);
     --docCounts2;
     assertEquals(docCounts2, resp2.getResults().getNumFound());
 
@@ -395,11 +382,10 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     deleteRequest.deleteById("3", "europe");
     deleteRequest.setCommitWithin(1);
     query.set("shards", "shard1");
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     shard1.request(deleteRequest);
-    shard1.commit(UPDATE_CREDENTIALS);
+    shard1.commit();
     Thread.sleep(1000);
-    resp1 = shard1.query(query, SEARCH_CREDENTIALS);
+    resp1 = shard1.query(query);
     --docCounts1;
     --docCounts1;
     assertEquals(docCounts1, resp1.getResults().getNumFound());
@@ -408,10 +394,9 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     deleteRequest.clear();
     deleteRequest.deleteById("1", "europe");
     deleteRequest.setCommitWithin(1);
-    deleteRequest.setAuthCredentials(UPDATE_CREDENTIALS);
     shard2.request(deleteRequest);
     query.set("shards", "shard1");
-    resp1 = shard1.query(query, SEARCH_CREDENTIALS);
+    resp1 = shard1.query(query);
     --docCounts1;
     assertEquals(docCounts1, resp1.getResults().getNumFound());
   }
@@ -459,7 +444,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     uReq = new UpdateRequest();
     docId = addDoc(docId, uReq);
     docId = addDoc(docId, uReq);
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
     
     uReq.process(cloudClient);
     uReq.process(controlClient);
@@ -484,7 +468,7 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.add("q", t1 + ":originalcontent");
-    QueryResponse results = clients.get(0).query(params, SEARCH_CREDENTIALS);
+    QueryResponse results = clients.get(0).query(params);
     assertEquals(1, results.getResults().getNumFound());
     
     // update doc
@@ -494,22 +478,21 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     
     assertDocCounts(VERBOSE);
     
-    results = clients.get(0).query(params, SEARCH_CREDENTIALS);
+    results = clients.get(0).query(params);
     assertEquals(0, results.getResults().getNumFound());
     
     params.set("q", t1 + ":updatedcontent");
     
-    results = clients.get(0).query(params, SEARCH_CREDENTIALS);
+    results = clients.get(0).query(params);
     assertEquals(1, results.getResults().getNumFound());
     
     UpdateRequest uReq = new UpdateRequest();
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
     //uReq.setParam(UpdateParams.UPDATE_CHAIN, DISTRIB_UPDATE_CHAIN);
     uReq.deleteById(Long.toString(docId)).process(clients.get(0));
     
     commit();
     
-    results = clients.get(0).query(params, SEARCH_CREDENTIALS);
+    results = clients.get(0).query(params);
     assertEquals(0, results.getResults().getNumFound());
     return docId;
   }
@@ -538,7 +521,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
       }
       
       uReq.add(topDocument);
-      uReq.setAuthCredentials(UPDATE_CREDENTIALS);
       uReq.process(cloudClient);
       uReq.process(controlClient);
     }
@@ -550,17 +532,17 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     //query
     // parents
     SolrQuery query = new SolrQuery("type_s:parent");
-    QueryResponse results = cloudClient.query(query, SEARCH_CREDENTIALS);
+    QueryResponse results = cloudClient.query(query);
     assertEquals(topDocsNum, results.getResults().getNumFound());
     
     //childs 
     query = new SolrQuery("type_s:child");
-    results = cloudClient.query(query, SEARCH_CREDENTIALS);
+    results = cloudClient.query(query);
     assertEquals(topDocsNum * childsNum, results.getResults().getNumFound());
     
     //grandchilds
     query = new SolrQuery("type_s:grand");
-    results = cloudClient.query(query, SEARCH_CREDENTIALS);
+    results = cloudClient.query(query);
     //each topDoc has t childs where each child has x = 0 + 2 + 4 + ..(t-1)*2 grands
     //x = 2 * (1 + 2 + 3 +.. (t-1)) => arithmetic summ of t-1 
     //x = 2 * ((t-1) * t / 2) = t * (t - 1)
@@ -597,7 +579,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
       UpdateRequest uReq;
       uReq = new UpdateRequest();
       docId = addDoc(docId, uReq);
-      uReq.setAuthCredentials(UPDATE_CREDENTIALS);
       
       uReq.process(cloudClient);
       uReq.process(controlClient);
@@ -619,12 +600,12 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     params.set("name", "collection1");
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
-    request.setAuthCredentials(ALL_CREDENTIALS);
+    
   
     cloudClient.request(request);
     
-    controlClient.deleteByQuery(null, "*:*", -1, UPDATE_CREDENTIALS);
-    controlClient.commit(UPDATE_CREDENTIALS);
+    controlClient.deleteByQuery("*:*");
+    controlClient.commit();
     
     // somtimes we use an oversharded collection
     createCollection(null, "collection2", 7, 3, 100000, cloudClient, null, "conf1");
@@ -648,7 +629,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
           for (int j = 0; j <cnt; j++) {
             addDoc("thread" + name + "_" + i + "_" + j, uReq);
           }
-          uReq.setAuthCredentials(UPDATE_CREDENTIALS);
           
           try {
             uReq.process(cloudClient);
@@ -681,9 +661,9 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     printLayout();
     
     SolrQuery query = new SolrQuery("*:*");
-    long controlCount = controlClient.query(query, SEARCH_CREDENTIALS).getResults()
+    long controlCount = controlClient.query(query).getResults()
         .getNumFound();
-    long cloudCount = cloudClient.query(query, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long cloudCount = cloudClient.query(query).getResults().getNumFound();
 
     
     CloudInspectUtil.compareResults(controlClient, cloudClient);
@@ -711,7 +691,7 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     QueryResponse results = query(cloudClient);
     long beforeCount = results.getResults().getNumFound();
     int cnt = TEST_NIGHTLY ? 2933 : 313;
-    try (ConcurrentUpdateSolrClient concurrentClient = new ConcurrentUpdateSolrClient(
+    try (ConcurrentUpdateSolrClient concurrentClient = createNewConcurrentUpdateSolrClientBase(
         ((HttpSolrClient) clients.get(0)).getBaseURL(), 10, 2)) {
       concurrentClient.setConnectionTimeout(120000);
       for (int i = 0; i < cnt; i++) {
@@ -739,7 +719,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     uReq.getParams().set(SolrInputDocument.VERSION_FIELD, Long.toString(version));
     addFields(doc1, "id", theDoc, t1, "theupdatestuff");
     uReq.add(doc1);
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
     
     uReq.process(cloudClient);
     uReq.process(controlClient);
@@ -754,8 +733,6 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     addFields(doc2, "id", theDoc, t1, "thenewupdatestuff");
     uReq.add(doc2);
     
-    uReq.setAuthCredentials(UPDATE_CREDENTIALS);
-    
     uReq.process(cloudClient);
     uReq.process(controlClient);
     
@@ -763,18 +740,18 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.add("q", t1 + ":thenewupdatestuff");
-    QueryResponse res = clients.get(0).query(params, SEARCH_CREDENTIALS);
+    QueryResponse res = clients.get(0).query(params);
     assertEquals(0, res.getResults().getNumFound());
     
     params = new ModifiableSolrParams();
     params.add("q", t1 + ":theupdatestuff");
-    res = clients.get(0).query(params, SEARCH_CREDENTIALS);
+    res = clients.get(0).query(params);
     assertEquals(1, res.getResults().getNumFound());
   }
 
   private QueryResponse query(SolrClient client) throws SolrServerException, IOException {
     SolrQuery query = new SolrQuery("*:*");
-    return client.query(query, SEARCH_CREDENTIALS);
+    return client.query(query);
   }
   
   protected SolrInputDocument addRandFields(SolrInputDocument sdoc) {

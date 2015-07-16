@@ -32,6 +32,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettyConfig;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.impl.BinaryResponseParser;
+import org.apache.solr.client.solrj.impl.ConcurrentUpdateSolrClient;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.DirectXmlRequest;
@@ -46,6 +47,7 @@ import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.common.util.SolrjNamedThreadFactory;
 import org.apache.solr.schema.TrieDateField;
 import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.servlet.security.RegExpAuthorizationFilter;
@@ -83,6 +85,8 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -497,7 +501,36 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     }
 
   }
-  
+
+  protected final ConcurrentUpdateSolrClient createNewConcurrentUpdateSolrClientBase(String solrServerUrl, int queueSize, int threadCount) {
+    return new AutoCredentialsConcurrentUpdateSolrClient(solrServerUrl, queueSize, threadCount);
+  }
+
+  protected class AutoCredentialsConcurrentUpdateSolrClient extends ConcurrentUpdateSolrClient {
+    
+    public AutoCredentialsConcurrentUpdateSolrClient(String solrServerUrl, int queueSize, int threadCount) {
+      super(solrServerUrl, queueSize, threadCount);
+    }
+
+    public AutoCredentialsConcurrentUpdateSolrClient(String solrServerUrl, HttpClient client, int queueSize, int threadCount) {
+      super(solrServerUrl, client, queueSize, threadCount);
+    }
+
+    public AutoCredentialsConcurrentUpdateSolrClient(String solrServerUrl, HttpClient client, int queueSize, int threadCount, ExecutorService es) {
+      super(solrServerUrl, client, queueSize, threadCount, es);
+    }
+
+    public AutoCredentialsConcurrentUpdateSolrClient(String solrServerUrl, HttpClient client, int queueSize, int threadCount, ExecutorService es, boolean streamDeletes) {
+      super(solrServerUrl, client, queueSize, threadCount, es, streamDeletes);
+    }
+
+    @Override
+    protected Optional<org.apache.solr.security.AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+      return BaseDistributedSearchTestCase.getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(request);
+    }
+
+  }
+
   private static List<RegExpPatternAndRoles> authorizationConstraints = RegExpAuthorizationFilter.getAuthorizationConstraints(JettySolrRunner.commonSecurityConfig);
   protected static Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
     if (RUN_WITH_COMMON_SECURITY) {
