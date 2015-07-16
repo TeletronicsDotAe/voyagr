@@ -20,6 +20,7 @@ package org.apache.solr.cloud;
 import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.util.LuceneTestCase.BadApple;
 import org.apache.lucene.util.LuceneTestCase.Slow;
+import org.apache.solr.BaseDistributedSearchTestCase;
 import org.apache.solr.SolrTestCaseJ4.SuppressSSL;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.embedded.JettyConfig;
@@ -90,7 +91,7 @@ public class SSLMigrationTest extends AbstractFullDistribZkTestBase {
         props.setProperty("schema", getSchemaFile());
       props.setProperty("solr.data.dir", getDataDir(testDir + "/shard" + i + "/data"));
 
-      JettySolrRunner newRunner = new JettySolrRunner(runner.getSolrHome(), props, config, true);
+      JettySolrRunner newRunner = new JettySolrRunner(runner.getSolrHome(), props, config, RUN_WITH_COMMON_SECURITY);
       newRunner.start();
       jettys.set(i, newRunner);
     }
