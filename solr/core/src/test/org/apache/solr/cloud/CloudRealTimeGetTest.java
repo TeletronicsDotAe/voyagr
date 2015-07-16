@@ -1,8 +1,6 @@
 package org.apache.solr.cloud;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
-
+import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.impl.BinaryResponseParser;
 import org.apache.solr.client.solrj.impl.CloudSolrClient;
@@ -15,6 +13,7 @@ import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.junit.Assert;
+import org.junit.Test;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -32,17 +31,18 @@ import org.junit.Assert;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+@Slow
 public class CloudRealTimeGetTest extends AbstractFullDistribZkTestBase {
 
   private String mycollection = "mycollection";
-  private String i1="a_si";
+  private String i1="a_i1";
   
   public CloudRealTimeGetTest() {
     fixShardCount(4);
     sliceCount = 2;
   }
   
+  @Test
   public void test() throws Exception {
     CloudSolrClient client = createCloudClient(mycollection);
     client.connect();
@@ -69,7 +69,7 @@ public class CloudRealTimeGetTest extends AbstractFullDistribZkTestBase {
       for (int i = 0; i < 100; i++) {
         SolrInputDocument doc = new SolrInputDocument();
         addFields(doc, id, i, i1, i);
-        client.add(doc, -1, UPDATE_CREDENTIALS);
+        client.add(doc);
       }
       
       for (int i = 0; i < 100; i++) {
@@ -83,7 +83,6 @@ public class CloudRealTimeGetTest extends AbstractFullDistribZkTestBase {
         query.setIncludeScore(false);
         query.setTerms(false);
         QueryRequest req = new QueryRequest(query);
-        req.setAuthCredentials(SEARCH_CREDENTIALS);
         req.setResponseParser(new BinaryResponseParser());
         QueryResponse rsp = req.process(client);
         SolrDocument out = (SolrDocument) rsp.getResponse().get("doc");
