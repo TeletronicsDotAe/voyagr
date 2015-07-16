@@ -87,8 +87,6 @@ import org.noggit.JSONWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
-
 /**
  * TODO: we should still test this works as a custom update chain as well as
  * what we test now - the default update chain
@@ -891,17 +889,12 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
   protected void del(String q) throws Exception {
     controlClient.deleteByQuery(q);
     cloudClient.deleteByQuery(q);
-  }
-  
-  protected void del(String q, AuthCredentials authCredentials) throws Exception {
-    controlClient.deleteByQuery(q, -1, authCredentials);
-    cloudClient.deleteByQuery(q, -1, authCredentials);
 
     /***
     for (SolrServer client : clients) {
       UpdateRequest ureq = new UpdateRequest();
       // ureq.setParam("update.chain", DISTRIB_UPDATE_CHAIN);
-      ureq.deleteByQuery(q).process(client, UPDATE_CREDENTIALS);
+      ureq.deleteByQuery(q).process(client);
     }
      ***/
   }// serial commit...
@@ -1361,7 +1354,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
           if (active) {
             SolrQuery query = new SolrQuery("*:*");
             query.set("distrib", false);
-              long results = client.query(query).getResults().getNumFound();
+            long results = client.query(query).getResults().getNumFound();
             if (verbose) System.err.println(new ZkCoreNodeProps(props)
                 .getCoreUrl() + " : " + results);
             if (verbose) System.err.println("shard:"
