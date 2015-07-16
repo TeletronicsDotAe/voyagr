@@ -39,10 +39,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.junit.Test;
 
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -106,11 +102,11 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     SolrInputDocument doc3 = getDoc(id, 8, i1, -600, tlong, 600, t1,
         "humpty dumpy2 sat on a walled");
 
-    cloudClient.add(doc1, -1, UPDATE_CREDENTIALS);
-    cloudClient.add(doc2, -1, UPDATE_CREDENTIALS);
-    cloudClient.add(doc3, -1, UPDATE_CREDENTIALS);
+    cloudClient.add(doc1);
+    cloudClient.add(doc2);
+    cloudClient.add(doc3);
     
-    cloudClient.commit(UPDATE_CREDENTIALS);
+    cloudClient.commit();
     
     SolrInputDocument doc6 = getDoc(id, 9, i1, -600, tlong, 600, t1,
         "humpty dumpy sat on a wall");
@@ -119,10 +115,10 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
 
     cloudClient.setDefaultCollection("collection2");
     
-    cloudClient.add(doc6, -1, UPDATE_CREDENTIALS);
-    cloudClient.add(doc7, -1, UPDATE_CREDENTIALS);
+    cloudClient.add(doc6);
+    cloudClient.add(doc7);
 
-    cloudClient.commit(UPDATE_CREDENTIALS);
+    cloudClient.commit();
     
     // create alias
     createAlias("testalias", "collection1");
@@ -130,7 +126,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     // search for alias
     SolrQuery query = new SolrQuery("*:*");
     query.set("collection", "testalias");
-    QueryResponse res = cloudClient.query(query, SEARCH_CREDENTIALS);
+    QueryResponse res = cloudClient.query(query);
     assertEquals(3, res.getResults().getNumFound());
     
     // search for alias with random non cloud client
@@ -139,7 +135,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     JettySolrRunner jetty = jettys.get(random().nextInt(jettys.size()));
     int port = jetty.getLocalPort();
     try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
-      res = client.query(query, SEARCH_CREDENTIALS);
+      res = client.query(query);
       assertEquals(3, res.getResults().getNumFound());
     }
 
@@ -148,7 +144,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     jetty = jettys.get(random().nextInt(jettys.size()));
     port = jetty.getLocalPort();
     try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
-      res = client.query(query, SEARCH_CREDENTIALS);
+      res = client.query(query);
       assertEquals(3, res.getResults().getNumFound());
     }
     // create alias, collection2 first because it's not on every node
@@ -175,7 +171,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     jetty = jettys.get(random().nextInt(jettys.size()));
     port = jetty.getLocalPort();
     try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
-      res = client.query(query, SEARCH_CREDENTIALS);
+      res = client.query(query);
       assertEquals(5, res.getResults().getNumFound());
     }
     // now without collections param
@@ -183,7 +179,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     jetty = jettys.get(random().nextInt(jettys.size()));
     port = jetty.getLocalPort();
     try (HttpSolrClient client = createNewSolrClientBase(buildUrl(port) + "/testalias")) {
-      res = client.query(query, SEARCH_CREDENTIALS);
+      res = client.query(query);
       assertEquals(5, res.getResults().getNumFound());
     }
 
@@ -194,7 +190,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     // search for alias
     query = new SolrQuery("*:*");
     query.set("collection", "testalias");
-    res = cloudClient.query(query, SEARCH_CREDENTIALS);
+    res = cloudClient.query(query);
     assertEquals(2, res.getResults().getNumFound());
     
     // set alias to two collections
@@ -203,14 +199,14 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     
     query = new SolrQuery("*:*");
     query.set("collection", "testalias");
-    res = cloudClient.query(query, SEARCH_CREDENTIALS);
+    res = cloudClient.query(query);
     assertEquals(5, res.getResults().getNumFound());
     
     // try a std client
     // search 1 and 2, but have no collections param
     query = new SolrQuery("*:*");
     try (HttpSolrClient client = createNewSolrClientBase(getBaseUrl((HttpSolrClient) clients.get(0)) + "/testalias")) {
-      res = client.query(query, SEARCH_CREDENTIALS);
+      res = client.query(query);
       assertEquals(5, res.getResults().getNumFound());
     }
 
@@ -222,9 +218,9 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     try (HttpSolrClient client = createNewSolrClientBase(getBaseUrl((HttpSolrClient) clients.get(0)) + "/testalias")) {
       SolrInputDocument doc8 = getDoc(id, 11, i1, -600, tlong, 600, t1,
           "humpty dumpy4 sat on a walls");
-      client.add(doc8, -1, UPDATE_CREDENTIALS);
-      client.commit(UPDATE_CREDENTIALS);
-      res = client.query(query, SEARCH_CREDENTIALS);
+      client.add(doc8);
+      client.commit();
+      res = client.query(query);
       assertEquals(3, res.getResults().getNumFound());
     }
     
@@ -232,7 +228,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     
     query = new SolrQuery("*:*");
     query.set("collection", "testalias");
-    res = cloudClient.query(query, SEARCH_CREDENTIALS);
+    res = cloudClient.query(query);
     assertEquals(6, res.getResults().getNumFound());
     
     deleteAlias("testalias");
@@ -240,7 +236,7 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
 
     boolean sawException = false;
     try {
-      res = cloudClient.query(query, SEARCH_CREDENTIALS);
+      res = cloudClient.query(query);
     } catch (SolrException e) {
       sawException = true;
     }
@@ -260,13 +256,11 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
         params.set("action", CollectionAction.CREATEALIAS.toString());
         QueryRequest request = new QueryRequest(params);
         request.setPath("/admin/collections");
-        request.setAuthCredentials(ALL_CREDENTIALS);
         client.request(request);
       } else {
         CreateAlias request = new CreateAlias();
         request.setAliasName(alias);
         request.setAliasedCollections(collections);
-        request.setAuthCredentials(ALL_CREDENTIALS);
         request.process(client);
       }
     }
@@ -281,12 +275,10 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
         params.set("action", CollectionAction.DELETEALIAS.toString());
         QueryRequest request = new QueryRequest(params);
         request.setPath("/admin/collections");
-        request.setAuthCredentials(ALL_CREDENTIALS);
         client.request(request);
       } else {
         DeleteAlias request = new DeleteAlias();
         request.setAliasName(alias);
-        request.setAuthCredentials(ALL_CREDENTIALS);
         request.process(client);
       }
     }
@@ -299,11 +291,10 @@ public class AliasIntegrationTest extends AbstractFullDistribZkTestBase {
     addFields(doc, fields);
     addFields(doc, "rnd_b", true);
     
-    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
+    controlClient.add(doc);
     
     UpdateRequest ureq = new UpdateRequest();
     ureq.add(doc);
-    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     ModifiableSolrParams params = new ModifiableSolrParams();
     for (CloudJettyRunner skip : skipServers) {
       params.add("test.distrib.skip.servers", skip.url + "/");

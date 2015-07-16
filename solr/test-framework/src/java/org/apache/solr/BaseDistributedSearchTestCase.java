@@ -492,7 +492,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     }
 
     @Override
-    protected Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+    protected Optional<org.apache.solr.security.AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
       return BaseDistributedSearchTestCase.getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(request);
     }
 
@@ -575,7 +575,6 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (SolrInputDocument sdoc : sdocs) {
       ureq.add(sdoc);
     }
-    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     return ureq.process(client);
   }
 
@@ -585,7 +584,6 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (Object id: ids) {
       ureq.deleteById(id.toString());
     }
-    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     return ureq.process(client);
   }
 
@@ -595,7 +593,6 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (String q: queries) {
       ureq.deleteByQuery(q);
     }
-    ureq.setAuthCredentials(UPDATE_CREDENTIALS);
     return ureq.process(client);
   }
 
@@ -604,23 +601,23 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
     for (int i = 0; i < fields.length; i += 2) {
       doc.addField((String) (fields[i]), fields[i + 1]);
     }
-    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
+    controlClient.add(doc);
 
     SolrClient client = clients.get(serverNumber);
-    client.add(doc, -1, UPDATE_CREDENTIALS);
+    client.add(doc);
   }
 
   protected void del(String q) throws Exception {
-    controlClient.deleteByQuery(q, -1, UPDATE_CREDENTIALS);
+    controlClient.deleteByQuery(q);
     for (SolrClient client : clients) {
-      client.deleteByQuery(q, -1, UPDATE_CREDENTIALS);
+      client.deleteByQuery(q);
     }
   }// serial commit...
 
   protected void commit() throws Exception {
-    controlClient.commit(UPDATE_CREDENTIALS);
+    controlClient.commit();
     for (SolrClient client : clients) {
-      client.commit(UPDATE_CREDENTIALS);
+      client.commit();
     }
   }
 
@@ -720,7 +717,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   public QueryResponse queryAndCompare(SolrParams params, Iterable<SolrClient> clients) throws SolrServerException, IOException {
     QueryResponse first = null;
     for (SolrClient client : clients) {
-      QueryResponse rsp = client.query(new ModifiableSolrParams(params), SEARCH_CREDENTIALS);
+      QueryResponse rsp = client.query(new ModifiableSolrParams(params));
       if (first == null) {
         first = rsp;
       } else {
