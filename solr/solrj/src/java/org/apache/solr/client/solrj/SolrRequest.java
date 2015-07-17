@@ -113,7 +113,7 @@ public abstract class SolrRequest<T extends SolrResponse> implements Serializabl
   }
 
   public void setAuthCredentials(AuthCredentials authCredentials) {
-    this.authCredentials = Optional.ofNullable(authCredentials);
+    setAuthCredentials(Optional.ofNullable(authCredentials));
   }
 
   public void setAuthCredentials(Optional<AuthCredentials> authCredentials) {
