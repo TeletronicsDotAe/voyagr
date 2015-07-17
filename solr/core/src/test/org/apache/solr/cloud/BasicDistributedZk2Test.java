@@ -31,6 +31,7 @@ import org.apache.solr.SolrTestCaseJ4.SuppressSSL;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.Create;
 import org.apache.solr.client.solrj.request.QueryRequest;
@@ -417,7 +418,7 @@ public class BasicDistributedZk2Test extends AbstractFullDistribZkTestBase {
   }
 
   private void checkForBackupSuccess(HttpSolrClient client, Path location) throws InterruptedException, IOException {
-    CheckBackupStatus checkBackupStatus = new CheckBackupStatus(client);
+    CheckBackupStatus checkBackupStatus = new CheckBackupStatus(client).setAuthCredentials(RUN_WITH_COMMON_SECURITY?JettySolrRunner.ALL_CREDENTIALS:null);
     while (!checkBackupStatus.success) {
       checkBackupStatus.fetchStatus();
       Thread.sleep(1000);
