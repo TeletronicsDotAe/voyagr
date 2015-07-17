@@ -98,7 +98,7 @@ public class JarRepository {
           HttpResponse entity = httpClient.execute(httpGet, context);
           int statusCode = entity.getStatusLine().getStatusCode();
           if (statusCode != 200) {
-            throw new SolrException(SolrException.ErrorCode.NOT_FOUND, "no such blob or version available: " + key  + ". Status: " + entity.getStatusLine());
+            throw new SolrException(SolrException.ErrorCode.NOT_FOUND, "no such blob or version available: " + key);
           }
           b = SimplePostTool.inputStreamToByteArray(entity.getEntity().getContent());
         } catch (Exception e) {
