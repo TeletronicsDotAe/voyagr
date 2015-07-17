@@ -30,6 +30,7 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
+import org.apache.solr.BaseDistributedSearchTestCase;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
@@ -50,6 +51,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
@@ -216,11 +218,12 @@ public class RestTestHarness extends BaseTestHarness implements Closeable {
     }
   }
   
+  // Calculating credentials as if this is called from distributed tests, because sometimes it is, and it is
+  // cumbersome to detect when it is
   protected static AuthCredentials getAuthCredentials(HttpUriRequest request) {
     String path = request.getURI().getPath();
-    if (path.startsWith("/update")) return UPDATE_CREDENTIALS;
-    if (path.startsWith("/search") || path.startsWith("/terms") || path.startsWith("/get")) return SEARCH_CREDENTIALS;
-    return ALL_CREDENTIALS;
+    Optional<AuthCredentials> authCredentials = BaseDistributedSearchTestCase.getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(path);
+    return (authCredentials == null)?null:(AuthCredentials)authCredentials.orElse(null);
   }
   
   public HttpContext getHttpContextForRequest(HttpUriRequest request) {

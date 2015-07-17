@@ -532,9 +532,12 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
   }
 
   private static List<RegExpPatternAndRoles> authorizationConstraints = RegExpAuthorizationFilter.getAuthorizationConstraints(JettySolrRunner.commonSecurityConfig);
-  protected static Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+  public static Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(SolrRequest request) {
+    return getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(request.getPath());
+  }
+  public static Optional<AuthCredentials> getAuthCredentialsForRequestWhereItHasNotBeenExplicitlyDecided(String path) {
     if (RUN_WITH_COMMON_SECURITY) {
-      List<String> firstMatchingConstraintsRoles = RegExpAuthorizationFilter.getMatchingRoles(authorizationConstraints, request.getPath());
+      List<String> firstMatchingConstraintsRoles = RegExpAuthorizationFilter.getMatchingRoles(authorizationConstraints, path);
       String roleToMatch = (firstMatchingConstraintsRoles.size() > 0)?firstMatchingConstraintsRoles.get(0):null;
       if (roleToMatch == null) return Optional.ofNullable(null);
       
@@ -542,7 +545,7 @@ public abstract class BaseDistributedSearchTestCase extends SolrTestCaseJ4 {
         for (String userRole : usernamePasswordRoles.roles) {
           if (roleToMatch.equals(userRole)) {
             AuthCredentials authCredentials = JettySolrRunner.usernameToAuthCredentialsMap.get(usernamePasswordRoles.username);
-            log.debug("Auto-credentials: Using credentials " + authCredentials.toString() + " for path " + request.getPath());
+            log.debug("Auto-credentials: Using credentials " + authCredentials.toString() + " for path " + path);
             return Optional.of(authCredentials);
           }
         }
