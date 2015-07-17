@@ -23,8 +23,6 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -56,7 +54,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.solr.core.ConfigOverlay.getObjectByPath;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
 
 public class TestBlobHandler extends AbstractFullDistribZkTestBase {
   static final Logger log = LoggerFactory.getLogger(TestBlobHandler.class);
@@ -163,12 +160,12 @@ public class TestBlobHandler extends AbstractFullDistribZkTestBase {
     HttpClient httpClient = cloudClient.getLbClient().getHttpClient();
 
     HttpGet httpGet = new HttpGet(url);
-    final HttpContext context = RestTestHarness.getHttpContextForRequest(httpGet, url);
-    byte[] b = RestTestHarness.getRawResponse((CloseableHttpClient)httpClient, httpGet, context);
+    HttpResponse entity = httpClient.execute(httpGet, RestTestHarness.getHttpContextForRequest(httpGet, url));
+    ByteBuffer b = SimplePostTool.inputStreamToByteArray(entity.getEntity().getContent());
     try {
-      assertEquals(b.length, bytarr.length);
+      assertEquals(b.limit(), bytarr.length);
       for (int i = 0; i < bytarr.length; i++) {
-        assertEquals(b[i], bytarr[i]);
+        assertEquals(b.get(i), bytarr[i]);
       }
     } finally {
       httpGet.releaseConnection();
@@ -185,7 +182,7 @@ public class TestBlobHandler extends AbstractFullDistribZkTestBase {
       httpPost.setHeader("Content-Type", "application/octet-stream");
       httpPost.setEntity(new ByteArrayEntity(bytarr.array(), bytarr.arrayOffset(), bytarr.limit()));
       entity = cloudClient.getLbClient().getHttpClient().execute(httpPost, 
-          HttpSolrClient.getHttpContext(ALL_CREDENTIALS, false, baseUrl)
+          RestTestHarness.getHttpContextForRequest(httpPost, baseUrl)
           ).getEntity();
       try {
         response = EntityUtils.toString(entity, StandardCharsets.UTF_8);
