@@ -18,7 +18,6 @@ package org.apache.solr.handler;
  */
 
 import static java.util.Arrays.asList;
-import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
 import static org.apache.solr.core.ConfigOverlay.getObjectByPath;
 import static org.noggit.ObjectBuilder.getVal;
 
@@ -214,7 +213,7 @@ public class TestSolrConfigHandlerConcurrent extends AbstractFullDistribZkTestBa
     HttpEntity entity = null;
     try {
       entity = cloudClient.getLbClient().getHttpClient().execute(get,
-          HttpSolrClient.getHttpContext(ALL_CREDENTIALS, false, uri)
+          RestTestHarness.getHttpContextForRequest(get, uri)
           ).getEntity();
       String response = EntityUtils.toString(entity, StandardCharsets.UTF_8);
       try {
