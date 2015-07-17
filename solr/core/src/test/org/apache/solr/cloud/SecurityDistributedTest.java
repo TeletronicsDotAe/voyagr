@@ -307,13 +307,13 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     modifyInterSolrNodeAuthCredentialsFactoryForSubRequests(AuthCredentials.createBasicAuthCredentials(UPDATE_USERNAME, UPDATE_PASSWORD + "wrong"));
     try {
       // Non-distributed should work, because there is no sub-requests sent
-      controlClient.deleteByQuery("*:*", -1, UPDATE_CREDENTIALS);
+      controlClient.deleteByQuery("*:*");
       doAndAssertSolrExeption(ErrorCode.PRECONDITION_FAILED.code, 
           Arrays.asList(new Integer[]{ErrorCode.UNAUTHORIZED.code /* two? , ErrorCode.UNAUTHORIZED.code*/}),
           new Callable<Object>() {
             @Override
             public Object call() throws Exception {
-              cloudClient.deleteByQuery("*:*", -1, UPDATE_CREDENTIALS);
+              cloudClient.deleteByQuery("*:*");
               return null;
             }
           });
@@ -325,12 +325,12 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     modifyInterSolrNodeAuthCredentialsFactoryForSubRequests(SEARCH_CREDENTIALS);
     try {
       // Non-distributed should work, because there is no sub-requests sent
-      controlClient.deleteByQuery("*:*", -1, UPDATE_CREDENTIALS);
+      controlClient.deleteByQuery("*:*");
       doAndAssertSolrExeption(ErrorCode.PRECONDITION_FAILED.code, 
           Arrays.asList(new Integer[]{ErrorCode.FORBIDDEN.code /* two? , ErrorCode.FORBIDDEN.code*/}), new Callable<Object>() {
             @Override
             public Object call() throws Exception {
-              cloudClient.deleteByQuery("*:*", -1, UPDATE_CREDENTIALS);
+              cloudClient.deleteByQuery("*:*");
               return null;
             }
           });
@@ -344,14 +344,14 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     try {
       doc.addField(id, 100);
       // Non-distributed should work, because there is no sub-requests sent
-      controlClient.add(doc, -1, UPDATE_CREDENTIALS);
+      controlClient.add(doc);
       doAndAssertSolrExeption(401, new Callable<Object>() {
         @Override
         public Object call() throws Exception {
           // Index the doc against to concrete nodes - they cannot both run the leader-replica of the shard where the doc belongs and
           // will therefore have to forward to leader in a sub-reguest
-          clients.get(0).add(doc, -1, UPDATE_CREDENTIALS);
-          clients.get(1).add(doc, -1, UPDATE_CREDENTIALS);
+          clients.get(0).add(doc);
+          clients.get(1).add(doc);
           return null;
         }
       });
@@ -363,14 +363,14 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     modifyInterSolrNodeAuthCredentialsFactoryForSubRequests(SEARCH_CREDENTIALS);
     try {
       // Non-distributed should work, because there is no sub-requests sent
-      controlClient.add(doc, -1, UPDATE_CREDENTIALS);
+      controlClient.add(doc);
       doAndAssertSolrExeption(403, new Callable<Object>() {
         @Override
         public Object call() throws Exception {
           // Index the doc against to concrete nodes - they cannot both run the leader-replica of the shard where the doc belongs and
           // will therefore have to forward to leader in a sub-reguest
-          clients.get(0).add(doc, -1, UPDATE_CREDENTIALS);
-          clients.get(1).add(doc, -1, UPDATE_CREDENTIALS);
+          clients.get(0).add(doc);
+          clients.get(1).add(doc);
           return null;
         }
       });
@@ -386,12 +386,12 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
       // Non-distributed should work, because there is no sub-requests sent
       selectParams.add("q", "*:*");
       selectParams.set("distrib", "false");
-      controlClient.query(selectParams, SEARCH_CREDENTIALS);
+      controlClient.query(selectParams);
       doAndAssertSolrExeption(401, new Callable<Object>() {
         @Override
         public Object call() throws Exception {
           selectParams.set("distrib", "true");
-          cloudClient.query(selectParams, SEARCH_CREDENTIALS);
+          cloudClient.query(selectParams);
           return null;
         }
       });
@@ -404,13 +404,13 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
     try {
       // Non-distributed should work, because there is no sub-requests sent
       selectParams.set("distrib", "false");
-      controlClient.query(selectParams, SEARCH_CREDENTIALS);
+      controlClient.query(selectParams);
       // TODO It ought to have been 403 below instead of -1, but things are just crappy with respect to 403 handling around the code
       doAndAssertSolrExeption(-1 /*403*/, new Callable<Object>() {
         @Override
         public Object call() throws Exception {
           selectParams.set("distrib", "true");
-          cloudClient.query(selectParams, SEARCH_CREDENTIALS);
+          cloudClient.query(selectParams);
           return null;
         }
       });
@@ -430,8 +430,8 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
       doAndAssertSolrExeption(401, new Callable<Object>() {
         @Override
         public Object call() throws Exception {
-          clients.get(0).query(getParams, SEARCH_CREDENTIALS);
-          clients.get(1).query(getParams, SEARCH_CREDENTIALS);
+          clients.get(0).query(getParams);
+          clients.get(1).query(getParams);
           return null;
         }
       });
@@ -449,8 +449,8 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
       doAndAssertSolrExeption(-1 /*403*/, new Callable<Object>() {
         @Override
         public Object call() throws Exception {
-          clients.get(0).query(getParams, SEARCH_CREDENTIALS);
-          clients.get(1).query(getParams, SEARCH_CREDENTIALS);
+          clients.get(0).query(getParams);
+          clients.get(1).query(getParams);
           return null;
         }
       });
