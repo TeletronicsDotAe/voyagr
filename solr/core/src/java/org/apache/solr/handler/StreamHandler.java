@@ -31,6 +31,7 @@ import org.apache.solr.core.CloseHook;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.util.plugin.SolrCoreAware;
 import org.apache.solr.common.util.Base64;
@@ -63,6 +64,7 @@ public class StreamHandler extends RequestHandlerBase implements SolrCoreAware {
     ByteArrayInputStream byteStream = new ByteArrayInputStream(bytes);
     ObjectInputStream objectInputStream = new ObjectInputStream(byteStream);
     TupleStream tupleStream = (TupleStream)objectInputStream.readObject();
+    tupleStream.setAuthCredentials(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req).getAuthCredentials());
 
     int worker = params.getInt("workerID");
     int numWorkers = params.getInt("numWorkers");

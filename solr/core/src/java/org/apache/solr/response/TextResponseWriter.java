@@ -40,6 +40,7 @@ import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.ReturnFields;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 
 /** Base class for text-oriented response writers.
  *
@@ -315,6 +316,7 @@ public abstract class TextResponseWriter {
   }
 
   public void writeTupleStream(TupleStream tupleStream) throws IOException {
+    tupleStream.setAuthCredentials(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req).getAuthCredentials());
     tupleStream.open();
     writeStartDocumentList("response", -1, -1, -1, null);
     boolean isFirst = true;

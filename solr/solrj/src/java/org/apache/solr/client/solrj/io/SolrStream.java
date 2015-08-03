@@ -27,7 +27,6 @@ import java.util.Iterator;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
-import org.apache.solr.security.AuthCredentials;
 
 /**
 *  Queries a single Solr instance and maps SolrDocs to a Stream of Tuples.
@@ -43,15 +42,13 @@ public class SolrStream extends TupleStream {
   private int workerID;
   private boolean trace;
   private Map<String, String> fieldMappings;
-  private AuthCredentials authCredentials;
   private transient JSONTupleStream jsonTupleStream;
   private transient HttpSolrClient client;
   private transient SolrClientCache cache;
 
-  public SolrStream(String baseUrl, Map params, AuthCredentials authCredentials) {
+  public SolrStream(String baseUrl, Map params) {
     this.baseUrl = baseUrl;
     this.params = params;
-    this.authCredentials = authCredentials;
   }
 
   public void setFieldMappings(Map<String, String> fieldMappings) {
@@ -79,13 +76,13 @@ public class SolrStream extends TupleStream {
   public void open() throws IOException {
 
     if(cache == null) {
-      client = new HttpSolrClient(baseUrl);
+      client = getSolrClientFactory().apply(baseUrl);
     } else {
       client = cache.getHttpSolrClient(baseUrl);
     }
 
     try {
-      jsonTupleStream = JSONTupleStream.create(client, loadParams(params), authCredentials);
+      jsonTupleStream = JSONTupleStream.create(client, loadParams(params), getAuthCredentials(), getPreemptiveAuthentication());
     } catch (Exception e) {
       throw new IOException(e);
     }

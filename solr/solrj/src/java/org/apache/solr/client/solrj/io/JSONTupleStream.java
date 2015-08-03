@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -54,7 +55,7 @@ public class JSONTupleStream {
   }
 
   // temporary...
-  public static JSONTupleStream create(SolrClient server, SolrParams requestParams, AuthCredentials authCredentials) throws IOException, SolrServerException {
+  public static JSONTupleStream create(SolrClient server, SolrParams requestParams, Optional<AuthCredentials> authCredentials, boolean preemptiveAuthentication) throws IOException, SolrServerException {
     String p = requestParams.get("qt");
     if(p != null) {
       ModifiableSolrParams modifiableSolrParams = (ModifiableSolrParams) requestParams;
@@ -66,6 +67,7 @@ public class JSONTupleStream {
     query.setResponseParser(new InputStreamResponseParser("json"));
     query.setMethod(SolrRequest.METHOD.POST);
     query.setAuthCredentials(authCredentials);
+    query.setPreemptiveAuthentication(preemptiveAuthentication);
     NamedList<Object> genericResponse = server.request(query);
     InputStream stream = (InputStream)genericResponse.get("stream");
     InputStreamReader reader = new InputStreamReader(stream, "UTF-8");

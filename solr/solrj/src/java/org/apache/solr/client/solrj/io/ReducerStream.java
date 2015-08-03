@@ -51,6 +51,7 @@ public class ReducerStream extends TupleStream {
   public ReducerStream(TupleStream tupleStream,
                        Comparator<Tuple> comp) {
     this.tupleStream = new PushBackStream(tupleStream);
+    tupleStream.setParent(this);
     this.comp = comp;
   }
 

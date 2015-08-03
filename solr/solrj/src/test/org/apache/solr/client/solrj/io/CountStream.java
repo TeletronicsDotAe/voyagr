@@ -28,6 +28,7 @@ public class CountStream extends TupleStream implements Serializable {
 
   public CountStream(TupleStream stream) {
     this.stream = stream;
+    stream.setParent(this);
   }
 
   public void close() throws IOException {

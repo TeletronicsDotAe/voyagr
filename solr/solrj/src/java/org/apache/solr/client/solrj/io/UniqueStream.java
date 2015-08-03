@@ -39,6 +39,7 @@ public class UniqueStream extends TupleStream {
 
   public UniqueStream(TupleStream tupleStream, Comparator<Tuple> comp) {
     this.tupleStream = tupleStream;
+    tupleStream.setParent(this);
     this.comp = comp;
   }
 

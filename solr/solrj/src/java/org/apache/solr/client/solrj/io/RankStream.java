@@ -43,6 +43,7 @@ public class RankStream extends TupleStream {
 
   public RankStream(TupleStream tupleStream, int size, Comparator<Tuple> comp) {
     this.tupleStream = tupleStream;
+    tupleStream.setParent(this);
     this.top = new PriorityQueue(size, new ReverseComp(comp));
     this.comp = comp;
     this.topList = new LinkedList();

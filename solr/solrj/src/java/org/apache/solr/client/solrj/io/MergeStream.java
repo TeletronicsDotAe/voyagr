@@ -38,7 +38,9 @@ public class MergeStream extends TupleStream {
 
   public MergeStream(TupleStream streamA, TupleStream streamB, Comparator<Tuple> comp) {
     this.streamA = new PushBackStream(streamA);
+    streamA.setParent(this);
     this.streamB = new PushBackStream(streamB);
+    streamB.setParent(this);
     this.comp = comp;
   }
 

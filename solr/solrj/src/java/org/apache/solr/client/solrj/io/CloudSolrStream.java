@@ -40,7 +40,6 @@ import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.util.SolrjNamedThreadFactory;
-import org.apache.solr.security.AuthCredentials;
 
 /**
  * Connects to Zookeeper to pick replicas from a specific collection to send the query to.
@@ -63,7 +62,6 @@ public class CloudSolrStream extends TupleStream {
   private int numWorkers;
   private int workerID;
   private boolean trace;
-  protected AuthCredentials authCredentials;
   protected transient Map<String, Tuple> eofTuples;
   protected transient SolrClientCache cache;
   protected transient CloudSolrClient cloudSolrClient;
@@ -71,13 +69,12 @@ public class CloudSolrStream extends TupleStream {
   protected transient TreeSet<TupleWrapper> tuples;
   protected transient StreamContext streamContext;
 
-  public CloudSolrStream(String zkHost, String collection, Map params, AuthCredentials authCredentials) throws IOException {
+  public CloudSolrStream(String zkHost, String collection, Map params) throws IOException {
     this.zkHost = zkHost;
     this.collection = collection;
     this.params = params;
     String sort = (String)params.get("sort");
     this.comp = parseComp(sort, params);
-    this.authCredentials = authCredentials;
   }
 
   //Used by the ParallelStream
@@ -187,11 +184,12 @@ public class CloudSolrStream extends TupleStream {
         Replica rep = shuffler.get(0);
         ZkCoreNodeProps zkProps = new ZkCoreNodeProps(rep);
         String url = zkProps.getCoreUrl();
-        SolrStream solrStream = new SolrStream(url, params, authCredentials);
+        SolrStream solrStream = new SolrStream(url, params);
         if(streamContext != null) {
           solrStream.setStreamContext(streamContext);
         }
         solrStream.setFieldMappings(this.fieldMappings);
+        solrStream.setParent(this);
         solrStreams.add(solrStream);
       }
     } catch (Exception e) {
