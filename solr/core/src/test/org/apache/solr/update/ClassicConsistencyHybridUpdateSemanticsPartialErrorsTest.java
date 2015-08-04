@@ -77,8 +77,8 @@ public class ClassicConsistencyHybridUpdateSemanticsPartialErrorsTest extends So
 	// AND docs ID = A and ID = B exist in db 
 	@Test
 	public void twoDocInsertShouldNotResultInErrorOnEmptyDB() throws Exception {
-		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", SolrInputDocument.VERSION_FIELD, "-1");
-		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", SolrInputDocument.VERSION_FIELD, "-1");
+		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", VersionInfo.VERSION_FIELD, "-1");
+		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", VersionInfo.VERSION_FIELD, "-1");
 		String add = add(new XmlDoc[]{dA, dB});
 		assertU(add);
 
@@ -96,8 +96,8 @@ public class ClassicConsistencyHybridUpdateSemanticsPartialErrorsTest extends So
 	public void twoDocInsertShouldResultInOnePartialErrorOnDBAlreadyContainingOneOfTheDocs() throws Exception {
 		assertU(adoc("id", "A"));
 		
-		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", SolrInputDocument.VERSION_FIELD, "-1");
-		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", SolrInputDocument.VERSION_FIELD, "-1");
+		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", VersionInfo.VERSION_FIELD, "-1");
+		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", VersionInfo.VERSION_FIELD, "-1");
 		String add = add(new XmlDoc[]{dA, dB});
 		PartialErrors pa = (PartialErrors)assertUpdateSemanticsException(add, PartialErrors.class);
 		assertEquals(DocumentAlreadyExists.class, SolrResponse.getPartialError(null, pa.getPayload(), "refA").getClass());
@@ -124,8 +124,8 @@ public class ClassicConsistencyHybridUpdateSemanticsPartialErrorsTest extends So
     docB.addField("subject", HELLO);
     Long versionB = addAndGetVersion(docB, null);
 		
-		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, SolrInputDocument.VERSION_FIELD, versionA.toString());
-		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, SolrInputDocument.VERSION_FIELD, new Long(versionB + 1).toString());
+		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, VersionInfo.VERSION_FIELD, versionA.toString());
+		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, VersionInfo.VERSION_FIELD, new Long(versionB + 1).toString());
 		String add = add(new XmlDoc[]{dA, dB});
 		PartialErrors pa = (PartialErrors)assertUpdateSemanticsException(add, PartialErrors.class);
 		assertGenericPartialErrorsPayload(pa, 1, 2);
@@ -147,8 +147,8 @@ public class ClassicConsistencyHybridUpdateSemanticsPartialErrorsTest extends So
 	// THEN partial fail: DocumentDoesNotExist for doc ID = A
 	@Test
 	public void updateOfNonexistingDocAndInsertOfNonexistingDocShouldResultInOnePartialErrorOnEmptyDB() throws Exception {
-		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, SolrInputDocument.VERSION_FIELD, "1234");
-		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, SolrInputDocument.VERSION_FIELD, "-1234");
+		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, VersionInfo.VERSION_FIELD, "1234");
+		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, VersionInfo.VERSION_FIELD, "-1234");
 		String add = add(new XmlDoc[]{dA, dB});
 		PartialErrors pa = (PartialErrors)assertUpdateSemanticsException(add, PartialErrors.class);
 		assertGenericPartialErrorsPayload(pa, 1, 2);
@@ -175,9 +175,9 @@ public class ClassicConsistencyHybridUpdateSemanticsPartialErrorsTest extends So
     docB.addField("subject", HELLO);
     Long versionB = addAndGetVersion(docB, null);
 		
-		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, SolrInputDocument.VERSION_FIELD, "-1");
-		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, SolrInputDocument.VERSION_FIELD, new Long(versionB+1).toString());
-		XmlDoc dC = doc(new String[]{"partref", "refC"}, "id", "C", "subject", WORLD, SolrInputDocument.VERSION_FIELD, "-1");
+		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, VersionInfo.VERSION_FIELD, "-1");
+		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, VersionInfo.VERSION_FIELD, new Long(versionB+1).toString());
+		XmlDoc dC = doc(new String[]{"partref", "refC"}, "id", "C", "subject", WORLD, VersionInfo.VERSION_FIELD, "-1");
 		String add = add(new XmlDoc[]{dA, dB, dC});
 		PartialErrors pa = (PartialErrors)assertUpdateSemanticsException(add, PartialErrors.class);
 		assertGenericPartialErrorsPayload(pa, 2, 3);
@@ -209,9 +209,9 @@ public class ClassicConsistencyHybridUpdateSemanticsPartialErrorsTest extends So
     docB.addField("subject", HELLO);
     Long versionB = addAndGetVersion(docB, null);
 		
-		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, SolrInputDocument.VERSION_FIELD, "-1");
-		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, SolrInputDocument.VERSION_FIELD, new Long(versionB+1).toString());
-		XmlDoc dC = doc(new String[]{"partref", "refC"}, "id", "C", "subject", WORLD, SolrInputDocument.VERSION_FIELD, "1234");
+		XmlDoc dA = doc(new String[]{"partref", "refA"}, "id", "A", "subject", WORLD, VersionInfo.VERSION_FIELD, "-1");
+		XmlDoc dB = doc(new String[]{"partref", "refB"}, "id", "B", "subject", WORLD, VersionInfo.VERSION_FIELD, new Long(versionB+1).toString());
+		XmlDoc dC = doc(new String[]{"partref", "refC"}, "id", "C", "subject", WORLD, VersionInfo.VERSION_FIELD, "1234");
 		String add = add(new XmlDoc[]{dA, dB, dC});
 		PartialErrors pa = (PartialErrors)assertUpdateSemanticsException(add, PartialErrors.class);
 		assertGenericPartialErrorsPayload(pa, 3, 3);

@@ -38,6 +38,8 @@ import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.update.VersionInfo;
+import org.apache.solr.update.processor.DistributedUpdateProcessor;
 import org.apache.zookeeper.CreateMode;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -711,12 +713,12 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
   
   private void testOptimisticUpdate(QueryResponse results) throws Exception {
     SolrDocument doc = results.getResults().get(0);
-    Long version = (Long) doc.getFieldValue(SolrInputDocument.VERSION_FIELD);
+    Long version = (Long) doc.getFieldValue(VersionInfo.VERSION_FIELD);
     Integer theDoc = (Integer) doc.getFieldValue("id");
     UpdateRequest uReq = new UpdateRequest();
     SolrInputDocument doc1 = new SolrInputDocument();
     uReq.setParams(new ModifiableSolrParams());
-    uReq.getParams().set(SolrInputDocument.VERSION_FIELD, Long.toString(version));
+    uReq.getParams().set(DistributedUpdateProcessor.VERSION_FIELD, Long.toString(version));
     addFields(doc1, "id", theDoc, t1, "theupdatestuff");
     uReq.add(doc1);
     
@@ -729,7 +731,7 @@ public class FullSolrCloudDistribCmdsTest extends AbstractFullDistribZkTestBase 
     SolrInputDocument doc2 = new SolrInputDocument();
     uReq = new UpdateRequest();
     uReq.setParams(new ModifiableSolrParams());
-    uReq.getParams().set(SolrInputDocument.VERSION_FIELD, Long.toString(version));
+    uReq.getParams().set(DistributedUpdateProcessor.VERSION_FIELD, Long.toString(version));
     addFields(doc2, "id", theDoc, t1, "thenewupdatestuff");
     uReq.add(doc2);
     

@@ -12,6 +12,7 @@ import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.exceptions.update.DocumentAlreadyExists;
 import org.apache.solr.common.exceptions.update.VersionConflict;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.update.VersionInfo;
 import org.junit.Test;
 
 /**
@@ -63,7 +64,7 @@ public class ClassicConsistencyHybridUpdateSemanticsSolrCloudTest extends Abstra
       // Setting _version_ negative means "insert" (requires document to not already exist)
       SolrInputDocument doc = new SolrInputDocument();
       doc.addField("id", i);
-      doc.addField(SolrInputDocument.VERSION_FIELD, -1);
+      doc.addField(VersionInfo.VERSION_FIELD, -1);
       docsForAlreadyExists.add(doc);
     }
     
@@ -73,7 +74,7 @@ public class ClassicConsistencyHybridUpdateSemanticsSolrCloudTest extends Abstra
       // Setting _version_ negative means "insert" (requires document to not already exist)
       SolrInputDocument doc = new SolrInputDocument();
       doc.addField("id", i);
-      doc.addField(SolrInputDocument.VERSION_FIELD, -1);
+      doc.addField(VersionInfo.VERSION_FIELD, -1);
       docsForVersionConflict.add(doc);
     }
     
@@ -83,7 +84,7 @@ public class ClassicConsistencyHybridUpdateSemanticsSolrCloudTest extends Abstra
       // Setting _version_ negative means "insert" (requires document to not already exist)
       SolrInputDocument doc = new SolrInputDocument();
       doc.addField("id", i);
-      doc.addField(SolrInputDocument.VERSION_FIELD, -1);
+      doc.addField(VersionInfo.VERSION_FIELD, -1);
       docsForSuccessCreate.add(doc);
     }
 

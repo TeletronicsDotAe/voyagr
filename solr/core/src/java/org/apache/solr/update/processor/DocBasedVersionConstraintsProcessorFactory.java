@@ -204,7 +204,7 @@ public class DocBasedVersionConstraintsProcessorFactory extends UpdateRequestPro
       this.core = req.getCore();
       this.versionFieldName = versionField;
       this.userVersionField = core.getLatestSchema().getField(versionField);
-      this.solrVersionField = core.getLatestSchema().getField(SolrInputDocument.VERSION_FIELD);
+      this.solrVersionField = core.getLatestSchema().getField(VersionInfo.VERSION_FIELD);
       this.useFieldCache = useFieldCache;
 
       for (UpdateRequestProcessor proc = next ;proc != null; proc = proc.next) {

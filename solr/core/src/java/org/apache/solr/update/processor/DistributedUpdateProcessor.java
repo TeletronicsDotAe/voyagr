@@ -247,6 +247,8 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
   private final UpdateRequestProcessor next;
   private final AtomicUpdateDocumentMerger docMerger;
 
+  public static final String VERSION_FIELD = "_version_";
+
   private final UpdateHandler updateHandler;
   private final UpdateLog ulog;
   private final VersionInfo vinfo;
@@ -1041,13 +1043,13 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     long versionOnUpdate = cmd.getVersion();
 
     if (versionOnUpdate == 0) {
-      SolrInputField versionField = cmd.getSolrInputDocument().getField(SolrInputDocument.VERSION_FIELD);
+      SolrInputField versionField = cmd.getSolrInputDocument().getField(VersionInfo.VERSION_FIELD);
       if (versionField != null) {
         Object o = versionField.getValue();
         versionOnUpdate = o instanceof Number ? ((Number) o).longValue() : Long.parseLong(o.toString());
       } else {
         // Find the version
-        String versionOnUpdateS = req.getParams().get(SolrInputDocument.VERSION_FIELD);
+        String versionOnUpdateS = req.getParams().get(VERSION_FIELD);
         versionOnUpdate = versionOnUpdateS == null ? 0 : Long.parseLong(versionOnUpdateS);
       }
     }
@@ -1084,7 +1086,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
               // forwarded from a collection but we are not buffering so strip original version and apply our own
               // see SOLR-5308
               log.info("Removing version field from doc: " + cmd.getPrintableId());
-              cmd.solrDoc.remove(SolrInputDocument.VERSION_FIELD);
+              cmd.solrDoc.remove(VERSION_FIELD);
               versionOnUpdate = 0;
             }
 
@@ -1105,7 +1107,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
             long version = vinfo.getNewClock();
             cmd.setVersion(version);
             cmd.setRequestVersion(versionOnUpdate);
-            cmd.getSolrInputDocument().setField(SolrInputDocument.VERSION_FIELD, version);
+            cmd.getSolrInputDocument().setField(VersionInfo.VERSION_FIELD, version);
             bucket.updateHighest(version);
           } else {
             // The leader forwarded us this update.
@@ -1186,7 +1188,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
         throw new SolrException(ErrorCode.CONFLICT, "Document not found for update.  id=" + cmd.getPrintableId());
       }
     } else {
-      oldDoc.remove(SolrInputDocument.VERSION_FIELD);
+      oldDoc.remove(VERSION_FIELD);
     }
     
 
@@ -1230,7 +1232,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
         params.set(DISTRIB_FROM, ZkCoreNodeProps.getCoreUrl(
             zkController.getBaseUrl(), req.getCore().getName()));
         params.set(DISTRIB_FROM_PARENT, cloudDesc.getShardId());
-        params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
+        params.set(VersionInfo.VERSION_FIELD, Long.toString(cmd.getVersion()));
         cmdDistrib.distribDelete(cmd, subShardLeaders, params, true);
       }
 
@@ -1242,7 +1244,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
             zkController.getBaseUrl(), req.getCore().getName()));
         params.set(DISTRIB_FROM_COLLECTION, req.getCore().getCoreDescriptor().getCloudDescriptor().getCollectionName());
         params.set(DISTRIB_FROM_SHARD, req.getCore().getCoreDescriptor().getCloudDescriptor().getShardId());
-        params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
+        params.set(VersionInfo.VERSION_FIELD, Long.toString(cmd.getVersion()));
         for (Node nodesByRoutingRule : nodesByRoutingRules) {
           cmdDistrib.distribDelete(cmd, Collections.singletonList(nodesByRoutingRule), params, true);
         }
@@ -1259,7 +1261,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
               : DistribPhase.TOLEADER.toString()));
       params.set(DISTRIB_FROM, ZkCoreNodeProps.getCoreUrl(
           zkController.getBaseUrl(), req.getCore().getName()));
-      params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
+      params.set(VersionInfo.VERSION_FIELD, Long.toString(cmd.getVersion()));
 
       cmdDistrib.distribDelete(cmd, nodes, params);
     }
@@ -1388,7 +1390,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     // Find the version
     long versionOnUpdate = cmd.getVersion();
     if (versionOnUpdate == 0) {
-      String versionOnUpdateS = req.getParams().get(SolrInputDocument.VERSION_FIELD);
+      String versionOnUpdateS = req.getParams().get(VERSION_FIELD);
       versionOnUpdate = versionOnUpdateS == null ? 0 : Long.parseLong(versionOnUpdateS);
     }
     versionOnUpdate = Math.abs(versionOnUpdate);  // normalize to positive version
@@ -1438,7 +1440,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     if (zkEnabled)  {
       // forward to all replicas
       ModifiableSolrParams params = new ModifiableSolrParams(filterParams(req.getParams()));
-      params.set(SolrInputDocument.VERSION_FIELD, Long.toString(cmd.getVersion()));
+      params.set(VERSION_FIELD, Long.toString(cmd.getVersion()));
       params.set(DISTRIB_UPDATE_PARAM, DistribPhase.FROMLEADER.toString());
       params.set(DISTRIB_FROM, ZkCoreNodeProps.getCoreUrl(
           zkController.getBaseUrl(), req.getCore().getName()));
@@ -1554,7 +1556,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     // Find the version
     long versionOnUpdate = cmd.getVersion();
     if (versionOnUpdate == 0) {
-      String versionOnUpdateS = req.getParams().get(SolrInputDocument.VERSION_FIELD);
+      String versionOnUpdateS = req.getParams().get(VERSION_FIELD);
       versionOnUpdate = versionOnUpdateS == null ? 0 : Long.parseLong(versionOnUpdateS);
     }
     long signedVersionOnUpdate = versionOnUpdate;

@@ -37,7 +37,8 @@ import java.util.Set;
  */
 public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<SolrInputField>, RequestPart, Serializable
 {
-	public static final String VERSION_FIELD="_version_";
+  public static final String VERSION_FIELD = "_version_";
+	
   private final Map<String,SolrInputField> _fields;
   private float _documentBoost = 1.0f;
   private List<SolrInputDocument> _childDocuments;
@@ -206,15 +207,6 @@ public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<S
   @Override
   public Iterator<SolrInputField> iterator() {
     return _fields.values().iterator();
-  }
-  
-  public Long getVersion() {
-  	SolrInputField versionField = getField(VERSION_FIELD);
-    if (versionField != null) {
-      Object o = versionField.getValue();
-      return (o instanceof Number)?((Number)o).longValue():Long.parseLong(o.toString());
-    }
-    return null;
   }
   
   public float getDocumentBoost() {

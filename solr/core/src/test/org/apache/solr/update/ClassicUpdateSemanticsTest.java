@@ -1,7 +1,6 @@
 package org.apache.solr.update;
 
 import org.apache.solr.SolrTestCaseJ4;
-import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.UpdateParams;
 import org.junit.AfterClass;
@@ -48,7 +47,7 @@ public class ClassicUpdateSemanticsTest extends SolrTestCaseJ4 {
 	public void testBasicClassicUpdateSemanticsDBInsert() throws Exception {
 		assertU(adoc("id", "A"));
 		
-		XmlDoc d = doc("id", "A", SolrInputDocument.VERSION_FIELD, "-1");
+		XmlDoc d = doc("id", "A", VersionInfo.VERSION_FIELD, "-1");
 		String add = add(d);
 		assertU(add);
 
@@ -67,7 +66,7 @@ public class ClassicUpdateSemanticsTest extends SolrTestCaseJ4 {
 	public void testJSONBasicClassicUpdateSemanticsDBInsert() throws Exception {
 		assertU(adoc("id", "A"));
 		
-		updateJ(jsonAdd(sdoc("id", "A", SolrInputDocument.VERSION_FIELD, "-1")), null);
+		updateJ(jsonAdd(sdoc("id", "A", VersionInfo.VERSION_FIELD, "-1")), null);
 
 		assertU(commit());
 
@@ -84,7 +83,7 @@ public class ClassicUpdateSemanticsTest extends SolrTestCaseJ4 {
 	public void testBasicClassicUpdateDontOverwriteSemanticsDBInsert() throws Exception {
 		assertU(adoc("id", "A"));
 		
-		XmlDoc d = doc("id", "A", SolrInputDocument.VERSION_FIELD, "100");
+		XmlDoc d = doc("id", "A", VersionInfo.VERSION_FIELD, "100");
 		String add = add(d, UpdateParams.OVERWRITE, "false");
 		assertU(add);
 
