@@ -116,7 +116,7 @@ public class TestMiniSolrCloudCluster extends LuceneTestCase {
       try (SolrZkClient zkClient = new SolrZkClient
           (miniCluster.getZkServer().getZkAddress(), AbstractZkTestCase.TIMEOUT, 45000, null)) {
         ZkStateReader zkStateReader = new ZkStateReader(zkClient);
-        AbstractDistribZkTestBase.waitForRecoveriesToFinish(collectionName, zkStateReader, true, true, 330, false);
+        AbstractDistribZkTestBase.waitForRecoveriesToFinish(collectionName, zkStateReader, true, true, 330);
 
         // modify/query collection
         CloudSolrClient cloudSolrClient = miniCluster.getSolrClient();

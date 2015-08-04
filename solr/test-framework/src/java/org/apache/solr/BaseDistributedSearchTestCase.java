@@ -19,7 +19,6 @@ package org.apache.solr;
 
 import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 import junit.framework.Assert;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.http.client.HttpClient;
 import org.apache.lucene.util.Constants;
@@ -31,12 +30,8 @@ import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettyConfig;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
-import org.apache.solr.client.solrj.impl.BinaryResponseParser;
 import org.apache.solr.client.solrj.impl.ConcurrentUpdateSolrClient;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
-import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
-import org.apache.solr.client.solrj.request.DirectXmlRequest;
-import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.response.UpdateResponse;
@@ -47,7 +42,6 @@ import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
-import org.apache.solr.common.util.SolrjNamedThreadFactory;
 import org.apache.solr.schema.TrieDateField;
 import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.servlet.security.RegExpAuthorizationFilter;
@@ -63,7 +57,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.servlet.Filter;
-
 import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.ElementType;
@@ -86,7 +79,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**

@@ -1005,6 +1005,7 @@ public class BasicDistributedZkTest extends AbstractFullDistribZkTestBase {
     getCommonCloudSolrClient().setDefaultCollection("collection1");
     long collection1Docs = getCommonCloudSolrClient().query(new SolrQuery("*:*")).getResults()
         .getNumFound();
+
     long collection2Docs = otherCollectionClients.get("collection2").get(0)
         .query(new SolrQuery("*:*")).getResults().getNumFound();
     System.out.println("found2: "+ collection2Docs);

@@ -43,7 +43,6 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.params.CoreConnectionPNames;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.BaseDistributedSearchTestCase;
-import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -72,7 +71,6 @@ import org.apache.solr.common.params.CollectionParams;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
-import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.core.CoreContainer;
@@ -290,7 +288,6 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
 
   }
 
-
   @Override
   protected void createServers(int numServers) throws Exception {
 
@@ -383,8 +380,6 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
     return defaultStateFormat; // random
   }
 
-  protected String configFile = "solrconfig.xml";
-  protected String schemaFile = null;
   /**
    * @param checkCreatedVsState
    *          if true, make sure the number created (numJettys) matches the
@@ -914,7 +909,7 @@ public abstract class AbstractFullDistribZkTestBase extends AbstractDistribZkTes
   protected void waitForRecoveriesToFinish(boolean verbose, int timeoutSeconds)
       throws Exception {
     ZkStateReader zkStateReader = cloudClient.getZkStateReader();
-    super.waitForRecoveriesToFinish(DEFAULT_COLLECTION, zkStateReader, verbose, true, timeoutSeconds, false);
+    super.waitForRecoveriesToFinish(DEFAULT_COLLECTION, zkStateReader, verbose, true, timeoutSeconds);
   }
 
   protected void checkQueries() throws Exception {

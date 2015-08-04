@@ -37,8 +37,13 @@ public class ClassicConsistencyHybridUpdateSemanticsSolrCloudTest extends Abstra
     super();
     fixShardCount(4);
     sliceCount = 2;
-    configFile = "solrconfig-classic-consistency-hybrid-semantics.xml";
-    schemaFile = "schema15.xml";
+    configString = "solrconfig-classic-consistency-hybrid-semantics.xml";
+    schemaString = "schema15.xml";
+  }
+
+  @Override
+  protected String getCloudSolrConfig() {
+    return configString;
   }
   
   @Test
@@ -110,7 +115,7 @@ public class ClassicConsistencyHybridUpdateSemanticsSolrCloudTest extends Abstra
 
     // Prepare all docs that we want to fail with VersionConflict to have a "real wrong" version number
     for (int i = 0; i < resp.getResults().getNumFound(); i++) {
-      int id = (Integer)resp.getResults().get(i).getFieldValue("id"); 
+      int id = Integer.parseInt((String)resp.getResults().get(i).getFieldValue("id")); 
       if ((id >= DOC_COUNT/3) && (id < (DOC_COUNT*2)/3)) {
         long currentVersion = (Long)resp.getResults().get(i).getFieldValue("_version_");
         docsForVersionConflict.get(id - DOC_COUNT/3).setField("_version_", currentVersion + 1);

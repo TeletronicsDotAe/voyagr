@@ -291,7 +291,7 @@ public class SecurityDistributedTest extends AbstractFullDistribZkTestBase {
       try {
         // Normally with functioning recovery it takes a few secs to recover, so waiting 15 secs to see 
         // that it is not successful must be enough
-        waitForRecoveriesToFinish(DEFAULT_COLLECTION, zkStateReader, false, true, 15, true);
+        waitForRecoveriesToFinish(DEFAULT_COLLECTION, zkStateReader, false, true, 15);
       } catch (AssertionError e) {
         assertEquals("There are still nodes recoverying - waited for 15 seconds", e.getMessage());
         sawProblemRecovering = true;
