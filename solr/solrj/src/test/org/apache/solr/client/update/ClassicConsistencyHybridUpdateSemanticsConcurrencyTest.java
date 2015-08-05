@@ -68,44 +68,46 @@ public class ClassicConsistencyHybridUpdateSemanticsConcurrencyTest extends
   private class ConcurrentUpdater implements Runnable {
     private SolrClient solrClient;
     private boolean timedOut;
+    private int otherExceptions;
     
     public ConcurrentUpdater(SolrClient solrClient) {
       super();
       this.solrClient = solrClient;
-      this.timedOut = false;
+      timedOut = false;
+      otherExceptions = 0;
     }
 
     @Override
     public void run() {
-      try {
-        long TIMEOUT_MS = 5 * 60 * 1000;
-        boolean documentExists = false;
-        boolean success = false;
-        long start = System.currentTimeMillis();
-        while (!success && ((System.currentTimeMillis() - start) < TIMEOUT_MS)) {
-          try {
-            if (!documentExists) {
-              createDocument();
-            } else {
-              if (!updateDocument()) {
-                documentExists = false;
-                continue;
-              }
+      long TIMEOUT_MS = 5 * 60 * 1000;
+      boolean documentExists = false;
+      boolean success = false;
+      long start = System.currentTimeMillis();
+      while (!success && ((System.currentTimeMillis() - start) < TIMEOUT_MS)) {
+        try {
+          if (!documentExists) {
+            createDocument();
+          } else {
+            if (!updateDocument()) {
+              documentExists = false;
+              continue;
             }
-            success = true;
-          } catch (DocumentAlreadyExists e) {
-            documentExists = true;
-          } catch (DocumentDoesNotExist e2) {
-            documentExists = false;
-          } catch (VersionConflict e2) {
-            documentExists = true;
           }
+          success = true;
+        } catch (DocumentAlreadyExists e) {
+          documentExists = true;
+        } catch (DocumentDoesNotExist e2) {
+          documentExists = false;
+        } catch (VersionConflict e2) {
+          documentExists = true;
+        } catch (Exception e) {
+          documentExists = false;
+          System.out.println("******** UNEXPECTED EXCEPTION **************");
+          e.printStackTrace(System.out);
+          otherExceptions++;
         }
-        if (!success) timedOut = true;
-      } catch (Exception e) {
-        System.out.println("******** UNEXPECTED EXCEPTION **************");
-        e.printStackTrace(System.out);
       }
+      if (!success) timedOut = true;
     }
     
     private void createDocument() throws Exception {
@@ -149,13 +151,23 @@ public class ClassicConsistencyHybridUpdateSemanticsConcurrencyTest extends
     for (int i = 0; i < CONCURRENT_THREADS; i++) {
       threads[i].join();
     }
+    
     int timeouts = 0;
     for (int i = 0; i < CONCURRENT_THREADS; i++) {
       if (updaters[i].timedOut) timeouts++;
     }
     assertEquals(0, timeouts);
+
     SolrDocument doc = realtimeGetSMSDocById(createNewSolrClient());
     assertEquals(CONCURRENT_THREADS, ((Integer)doc.getFieldValue("popularity")).intValue());
+
+    int totalOtherExceptions = 0;
+    for (int i = 0; i < CONCURRENT_THREADS; i++) {
+      totalOtherExceptions += updaters[i].otherExceptions;
+    }
+    if (totalOtherExceptions > 0) {
+      System.out.println("WARNING: There are other exceptions occuring. Really not supposed to happen");
+    }
   }
 
 }
