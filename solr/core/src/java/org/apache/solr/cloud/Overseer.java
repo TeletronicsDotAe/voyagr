@@ -27,6 +27,7 @@ import org.apache.solr.cloud.overseer.SliceMutator;
 import org.apache.solr.cloud.overseer.ZkStateWriter;
 import org.apache.solr.cloud.overseer.ZkWriteCommand;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.TestSpeedControllers;
 import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.DocCollection;
 import org.apache.solr.common.cloud.Replica;
@@ -74,7 +75,7 @@ import static org.apache.solr.common.params.CollectionParams.CollectionAction.BA
 public class Overseer implements Closeable {
   public static final String QUEUE_OPERATION = "operation";
 
-  public static final int STATE_UPDATE_DELAY = 1500;  // delay between cloud state updates
+  public static final int getStatUpdateDelay() { return TestSpeedControllers.zkClusterInfoMinUpdateInterval(); };  // delay between cloud state updates
 
   private static Logger log = LoggerFactory.getLogger(Overseer.class);
 

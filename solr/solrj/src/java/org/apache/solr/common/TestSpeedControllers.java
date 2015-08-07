@@ -21,6 +21,8 @@ public class TestSpeedControllers {
   
   public static interface Interface {
     
+    int zkClusterInfoMinUpdateInterval();
+    
     int zkControllerSleepFactor();
 
     boolean fieldTypePluginLoaderUseFieldTypeCache();
@@ -30,6 +32,10 @@ public class TestSpeedControllers {
   }
   
   public static class DefaultImplementation implements Interface {
+    public int zkClusterInfoMinUpdateInterval() {
+      return 1500;
+    }
+    
     public boolean overseerWaitInMainQueuePeek() {
       return false;
     }
@@ -53,6 +59,10 @@ public class TestSpeedControllers {
     Interface oldImpl = currentImplementation;
     currentImplementation = newImpl;
     return oldImpl;
+  }
+  
+  public static int zkClusterInfoMinUpdateInterval() {
+    return currentImplementation.zkClusterInfoMinUpdateInterval();
   }
 
   public static int zkControllerSleepFactor() {
