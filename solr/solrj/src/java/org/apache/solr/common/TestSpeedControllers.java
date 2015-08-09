@@ -32,22 +32,22 @@ public class TestSpeedControllers {
   }
   
   public static class DefaultImplementation implements Interface {
+    @Override
     public int zkClusterInfoMinUpdateInterval() {
       return 1500;
     }
     
-    public boolean overseerWaitInMainQueuePeek() {
-      return false;
-    }
-    
+    @Override
     public int zkControllerSleepFactor() {
       return 1000;
     }
   
+    @Override
     public boolean fieldTypePluginLoaderUseFieldTypeCache() {
       return false;
     }
     
+    @Override
     public boolean zkCmdExecutorRetry() {
       return true;
     }
