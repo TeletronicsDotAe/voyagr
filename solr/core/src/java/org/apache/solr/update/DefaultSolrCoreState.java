@@ -30,6 +30,7 @@ import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.DirectoryFactory;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.logging.MDCLoggingContext;
 import org.apache.solr.util.RefCounted;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,27 +100,24 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
           throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE, "Already closed");
         }
       }
-      
+
       if (core == null) {
         // core == null is a signal to just return the current writer, or null
         // if none.
         initRefCntWriter();
         if (refCntWriter == null) return null;
-        writerFree = false;
-        writerPauseLock.notifyAll();
-        if (refCntWriter != null) refCntWriter.incref();
-        
-        return refCntWriter;
+      } else {
+        if (indexWriter == null) {
+          indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2");
+        }
+        initRefCntWriter();
       }
-      
-      if (indexWriter == null) {
-        indexWriter = createMainIndexWriter(core, "DirectUpdateHandler2");
-      }
-      initRefCntWriter();
+
       writerFree = false;
-      writerPauseLock.notifyAll();
       refCntWriter.incref();
+      writerPauseLock.notifyAll();
       return refCntWriter;
+
     }
   }
 
@@ -151,18 +149,18 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
       pauseWriter = true;
       // then lets wait until it's out of use
       log.info("Waiting until IndexWriter is unused... core=" + coreName);
-      
-      while (!writerFree) {
-        try {
-          writerPauseLock.wait(100);
-        } catch (InterruptedException e) {}
-        
-        if (closed) {
-          throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE, "SolrCoreState already closed");
-        }
-      }
 
       try {
+        while (!writerFree) {
+          try {
+            writerPauseLock.wait(100);
+          } catch (InterruptedException e) {
+          }
+          if (closed) {
+            throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE, "SolrCoreState already closed");
+          }
+        }
+
         if (indexWriter != null) {
           if (!rollback) {
             try {
@@ -187,7 +185,6 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
         // we need to null this so it picks up the new writer next get call
         refCntWriter = null;
       } finally {
-        
         pauseWriter = false;
         writerPauseLock.notifyAll();
       }
@@ -209,39 +206,44 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
       pauseWriter = true;
       // then lets wait until it's out of use
       log.info("Waiting until IndexWriter is unused... core=" + coreName);
-      
-      while (!writerFree) {
-        try {
-          writerPauseLock.wait(100);
-        } catch (InterruptedException e) {}
-        
-        if (closed) {
-          throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE,
-              "SolrCoreState already closed");
-        }
-      }
-      
-      if (indexWriter != null) {
-        if (!rollback) {
+      try {
+        while (!writerFree) {
           try {
-            log.info("Closing old IndexWriter... core=" + coreName);
-            indexWriter.close();
-          } catch (Exception e) {
-            SolrException.log(log, "Error closing old IndexWriter. core="
-                + coreName, e);
+            writerPauseLock.wait(100);
+          } catch (InterruptedException e) {
           }
-        } else {
-          try {
-            log.info("Rollback old IndexWriter... core=" + coreName);
-            indexWriter.rollback();
-          } catch (Exception e) {
-            SolrException.log(log, "Error rolling back old IndexWriter. core="
-                + coreName, e);
+
+          if (closed) {
+            throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE,
+                "SolrCoreState already closed");
           }
         }
+
+        if (indexWriter != null) {
+          if (!rollback) {
+            try {
+              log.info("Closing old IndexWriter... core=" + coreName);
+              indexWriter.close();
+            } catch (Exception e) {
+              SolrException.log(log, "Error closing old IndexWriter. core="
+                  + coreName, e);
+            }
+          } else {
+            try {
+              log.info("Rollback old IndexWriter... core=" + coreName);
+              indexWriter.rollback();
+            } catch (Exception e) {
+              SolrException.log(log, "Error rolling back old IndexWriter. core="
+                  + coreName, e);
+            }
+          }
+        }
+      } finally {
+        pauseWriter = false;
+        writerPauseLock.notifyAll();
       }
-      
     }
+
   }
   
   @Override
@@ -282,52 +284,57 @@ public final class DefaultSolrCoreState extends SolrCoreState implements Recover
 
   @Override
   public void doRecovery(CoreContainer cc, CoreDescriptor cd) {
-    if (SKIP_AUTO_RECOVERY) {
-      log.warn("Skipping recovery according to sys prop solrcloud.skip.autorecovery");
-      return;
-    }
-    
-    // check before we grab the lock
-    if (cc.isShutDown()) {
-      log.warn("Skipping recovery because Solr is close");
-      return;
-    }
-    
-    synchronized (recoveryLock) {
-      // to be air tight we must also check after lock
-      if (cc.isShutDown()) {
-        log.warn("Skipping recovery because Solr is close");
+    MDCLoggingContext.setCoreDescriptor(cd);
+    try {
+      if (SKIP_AUTO_RECOVERY) {
+        log.warn("Skipping recovery according to sys prop solrcloud.skip.autorecovery");
         return;
       }
-      log.info("Running recovery - first canceling any ongoing recovery");
-      cancelRecovery();
       
-      while (recoveryRunning) {
-        try {
-          recoveryLock.wait(1000);
-        } catch (InterruptedException e) {
-
-        }
-        // check again for those that were waiting
+      // check before we grab the lock
+      if (cc.isShutDown()) {
+        log.warn("Skipping recovery because Solr is shutdown");
+        return;
+      }
+      
+      synchronized (recoveryLock) {
+        // to be air tight we must also check after lock
         if (cc.isShutDown()) {
-          log.warn("Skipping recovery because Solr is close");
+          log.warn("Skipping recovery because Solr is shutdown");
           return;
         }
-        if (closed) return;
+        log.info("Running recovery - first canceling any ongoing recovery");
+        cancelRecovery();
+        
+        while (recoveryRunning) {
+          try {
+            recoveryLock.wait(1000);
+          } catch (InterruptedException e) {
+          
+          }
+          // check again for those that were waiting
+          if (cc.isShutDown()) {
+            log.warn("Skipping recovery because Solr is shutdown");
+            return;
+          }
+          if (closed) return;
+        }
+        
+        // if true, we are recovering after startup and shouldn't have (or be receiving) additional updates (except for
+        // local tlog recovery)
+        boolean recoveringAfterStartup = recoveryStrat == null;
+        
+        recoveryThrottle.minimumWaitBetweenActions();
+        recoveryThrottle.markAttemptingAction();
+        
+        recoveryStrat = new RecoveryStrategy(cc, cd, this);
+        recoveryStrat.setRecoveringAfterStartup(recoveringAfterStartup);
+        recoveryStrat.start();
+        recoveryRunning = true;
       }
-
-      // if true, we are recovering after startup and shouldn't have (or be receiving) additional updates (except for local tlog recovery)
-      boolean recoveringAfterStartup = recoveryStrat == null;
-
-      recoveryThrottle.minimumWaitBetweenActions();
-      recoveryThrottle.markAttemptingAction();
-      
-      recoveryStrat = new RecoveryStrategy(cc, cd, this);
-      recoveryStrat.setRecoveringAfterStartup(recoveringAfterStartup);
-      recoveryStrat.start();
-      recoveryRunning = true;
+    } finally {
+      MDCLoggingContext.clear();
     }
-    
   }
   
   @Override

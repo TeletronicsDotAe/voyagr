@@ -33,6 +33,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.search.similarities.DefaultSimilarity;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
 
 /** This class only tests some basic functionality in CSQ, the main parts are mostly
@@ -54,7 +55,7 @@ public class TestConstantScoreQuery extends LuceneTestCase {
     QueryUtils.checkUnequal(q1, new TermQuery(new Term("a", "b")));
   }
   
-  private void checkHits(IndexSearcher searcher, Query q, final float expectedScore, final String scorerClassName, final String innerScorerClassName) throws IOException {
+  private void checkHits(IndexSearcher searcher, Query q, final float expectedScore, final Class<? extends Scorer> innerScorerClass) throws IOException {
     final int[] count = new int[1];
     searcher.search(q, new SimpleCollector() {
       private Scorer scorer;
@@ -62,10 +63,9 @@ public class TestConstantScoreQuery extends LuceneTestCase {
       @Override
       public void setScorer(Scorer scorer) {
         this.scorer = scorer;
-        assertEquals("Scorer is implemented by wrong class", scorerClassName, scorer.getClass().getName());
-        if (innerScorerClassName != null && scorer instanceof ConstantScoreQuery.ConstantScoreScorer) {
-          final ConstantScoreQuery.ConstantScoreScorer innerScorer = (ConstantScoreQuery.ConstantScoreScorer) scorer;
-          assertEquals("inner Scorer is implemented by wrong class", innerScorerClassName, innerScorer.in.getClass().getName());
+        if (innerScorerClass != null) {
+          final FilterScorer innerScorer = (FilterScorer) scorer;
+          assertEquals("inner Scorer is implemented by wrong class", innerScorerClass, innerScorer.in.getClass());
         }
       }
       
@@ -114,23 +114,21 @@ public class TestConstantScoreQuery extends LuceneTestCase {
       final Query csq2 = new ConstantScoreQuery(csq1);
       csq2.setBoost(5.0f);
       
-      final BooleanQuery bq = new BooleanQuery();
+      final BooleanQuery.Builder bq = new BooleanQuery.Builder();
       bq.add(csq1, BooleanClause.Occur.SHOULD);
       bq.add(csq2, BooleanClause.Occur.SHOULD);
       
-      final Query csqbq = new ConstantScoreQuery(bq);
+      final Query csqbq = new ConstantScoreQuery(bq.build());
       csqbq.setBoost(17.0f);
       
-      checkHits(searcher, csq1, csq1.getBoost(), ConstantScoreQuery.ConstantScoreScorer.class.getName(), TermScorer.class.getName());
-      checkHits(searcher, csq2, csq2.getBoost(), ConstantScoreQuery.ConstantScoreScorer.class.getName(), TermScorer.class.getName());
+      checkHits(searcher, csq1, csq1.getBoost(), TermScorer.class);
+      checkHits(searcher, csq2, csq2.getBoost(), TermScorer.class);
       
       // for the combined BQ, the scorer should always be BooleanScorer's BucketScorer, because our scorer supports out-of order collection!
-      final String bucketScorerClass = FakeScorer.class.getName();
-      checkHits(searcher, bq, csq1.getBoost() + csq2.getBoost(), bucketScorerClass, null);
-      checkHits(searcher, csqbq, csqbq.getBoost(), ConstantScoreQuery.ConstantScoreScorer.class.getName(), bucketScorerClass);
+      final Class<FakeScorer> bucketScorerClass = FakeScorer.class;
+      checkHits(searcher, csqbq, csqbq.getBoost(), bucketScorerClass);
     } finally {
-      if (reader != null) reader.close();
-      if (directory != null) directory.close();
+      IOUtils.close(reader, directory);
     }
   }
 
@@ -233,14 +231,12 @@ public class TestConstantScoreQuery extends LuceneTestCase {
     final IndexSearcher searcher = newSearcher(reader);
     searcher.setQueryCache(null); // to still have approximations
 
-    PhraseQuery pq = new PhraseQuery();
-    pq.add(new Term("field", "a"));
-    pq.add(new Term("field", "b"));
+    PhraseQuery pq = new PhraseQuery("field", "a", "b");
 
     ConstantScoreQuery q = new ConstantScoreQuery(pq);
 
     final Weight weight = searcher.createNormalizedWeight(q, true);
-    final Scorer scorer = weight.scorer(searcher.getIndexReader().leaves().get(0), null);
+    final Scorer scorer = weight.scorer(searcher.getIndexReader().leaves().get(0));
     assertNotNull(scorer.asTwoPhaseIterator());
 
     reader.close();

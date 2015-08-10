@@ -34,9 +34,8 @@ public class BitDocIdSet extends DocIdSet {
   private final long cost;
 
   /**
-   * Wrap the given {@link FixedBitSet} as a {@link DocIdSet}. The provided
-   * {@link FixedBitSet} should not be modified after having wrapped as a
-   * {@link DocIdSet}.
+   * Wrap the given {@link BitSet} as a {@link DocIdSet}. The provided
+   * {@link BitSet} must not be modified afterwards.
    */
   public BitDocIdSet(BitSet set, long cost) {
     this.set = set;
@@ -78,7 +77,8 @@ public class BitDocIdSet extends DocIdSet {
   }
 
   /**
-   * A builder of {@link DocIdSet}s that supports random access.
+   * A builder of {@link DocIdSet}s that supports random access. If you don't
+   * need random access, you should rather use {@link DocIdSetBuilder}.
    * @lucene.internal
    */
   public static final class Builder {

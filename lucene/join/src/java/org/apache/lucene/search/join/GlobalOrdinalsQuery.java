@@ -33,7 +33,6 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.LongBitSet;
 import org.apache.lucene.util.LongValues;
@@ -139,13 +138,13 @@ final class GlobalOrdinalsQuery extends Query {
     }
 
     @Override
-    public Scorer scorer(LeafReaderContext context, Bits acceptDocs) throws IOException {
+    public Scorer scorer(LeafReaderContext context) throws IOException {
       SortedDocValues values = DocValues.getSorted(context.reader(), joinField);
       if (values == null) {
         return null;
       }
 
-      Scorer approximationScorer = approximationWeight.scorer(context, acceptDocs);
+      Scorer approximationScorer = approximationWeight.scorer(context);
       if (approximationScorer == null) {
         return null;
       }
@@ -160,11 +159,13 @@ final class GlobalOrdinalsQuery extends Query {
 
   final static class OrdinalMapScorer extends BaseGlobalOrdinalScorer {
 
+    final LongBitSet foundOrds;
     final LongValues segmentOrdToGlobalOrdLookup;
 
     public OrdinalMapScorer(Weight weight, float score, LongBitSet foundOrds, SortedDocValues values, Scorer approximationScorer, LongValues segmentOrdToGlobalOrdLookup) {
-      super(weight, foundOrds, values, approximationScorer);
+      super(weight, values, approximationScorer);
       this.score = score;
+      this.foundOrds = foundOrds;
       this.segmentOrdToGlobalOrdLookup = segmentOrdToGlobalOrdLookup;
     }
 
@@ -203,9 +204,12 @@ final class GlobalOrdinalsQuery extends Query {
 
   final static class SegmentOrdinalScorer extends BaseGlobalOrdinalScorer {
 
+    final LongBitSet foundOrds;
+
     public SegmentOrdinalScorer(Weight weight, float score, LongBitSet foundOrds, SortedDocValues values, Scorer approximationScorer) {
-      super(weight, foundOrds, values, approximationScorer);
+      super(weight, values, approximationScorer);
       this.score = score;
+      this.foundOrds = foundOrds;
     }
 
     @Override

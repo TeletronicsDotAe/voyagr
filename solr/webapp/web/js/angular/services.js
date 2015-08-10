@@ -67,8 +67,9 @@ solrAdminServices.factory('System',
   }])
 .factory('Replication',
   ['$resource', function($resource) {
-    return $resource('/solr/:core/replication', {'wt':'json', core: "@core", 'command': 'details', '_':Date.now()}, {
-      "details": {params: {command: "details"}}
+    return $resource('/solr/:core/replication', {'wt':'json', core: "@core", '_':Date.now()}, {
+      "details": {params: {command: "details"}},
+      "command": {params: {}}
     });
   }])
 .factory('CoreSystem',
@@ -77,10 +78,13 @@ solrAdminServices.factory('System',
   }])
 .factory('Update',
   ['$resource', function($resource) {
-    return $resource('/solr/:core/:handler', {core: '@core', wt:'json', _:Date.now(), handler:'/update'}, {
+    return $resource('/solr/:core/:handler', {core: '@core', wt:'json', _:Date.now(), handler:'update'}, {
       "optimize": {params: { optimize: "true"}},
       "commit": {params: {commit: "true"}},
-      "post": {method: "POST", params: {handler: '@handler'}}
+      "post": {headers: {'Content-type': 'application/json'}, method: "POST", params: {handler: '@handler'}},
+      "postJson": {headers: {'Content-type': 'application/json'}, method: "POST", params: {handler: '@handler'}},
+      "postXml": {headers: {'Content-type': 'text/xml'}, method: "POST", params: {handler: '@handler'}},
+      "postCsv": {headers: {'Content-type': 'application/csv'}, method: "POST", params: {handler: '@handler'}}
     });
   }])
 .service('FileUpload', function ($http) {
@@ -106,14 +110,42 @@ solrAdminServices.factory('System',
 .factory('Luke',
   ['$resource', function($resource) {
     return $resource('/solr/:core/admin/luke', {core: '@core', wt:'json', _:Date.now()}, {
+      "index":  {params: {numTerms: 0}},
       "schema": {params: {show:'schema'}},
-      "index":  {params: {show:'index', numTerms: 0}}
+      "field": {},
+      "fields": {params: {show:'schema'}, interceptor: {
+          response: function(response) {
+              var fieldsAndTypes = [];
+              for (var field in response.data.schema.fields) {
+                fieldsAndTypes.push({group: "Fields", label: field, value: "fieldname=" + field});
+              }
+              for (var type in response.data.schema.types) {
+                fieldsAndTypes.push({group: "Types", label: type, value: "fieldtype=" + type});
+              }
+              return fieldsAndTypes;
+          }
+      }}
     });
   }])
 .factory('Analysis',
   ['$resource', function($resource) {
     return $resource('/solr/:core/analysis/field', {core: '@core', wt:'json', _:Date.now()}, {
       "field": {params: {"analysis.showmatch": true}}
+    });
+  }])
+.factory('DataImport',
+  ['$resource', function($resource) {
+    return $resource('/solr/:core/dataimport', {core: '@core', indent:'on', wt:'json', _:Date.now()}, {
+      "config": {params: {command: "show-config", doNotIntercept: "true"},
+                 transformResponse: function(data) {
+                    return {config: data};
+                 }
+                },
+      "status": {params: {command: "status", doNotIntercept: "true"}},
+      "reload": {params: {command: "reload-config"}},
+      "post": {method: "POST",
+                headers: {'Content-type': 'application/x-www-form-urlencoded'},
+                transformRequest: function(data) { return $.param(data) }}
     });
   }])
 .factory('Ping',
@@ -127,6 +159,7 @@ solrAdminServices.factory('System',
   ['$resource', function($resource) {
     return $resource('/solr/:core/admin/mbeans', {'wt':'json', core: '@core', '_':Date.now()}, {
         stats: {params: {stats: true}},
+        info: {},
         reference: {
             params: {wt: "xml", stats: true}, transformResponse: function (data) {
                 return {reference: data}
@@ -150,22 +183,32 @@ solrAdminServices.factory('System',
       }}
     });
   }])
-.factory('Query', // use $http for Query, as we need complete control over the URL
-  ['$http', '$location', function($http, $location) {
-    return {
-      "query": function(url, callback) {
-        $http({
-          url:url,
-          method: 'GET',
-          transformResponse: [ function(data, headersGetter){ return {data:data}}]
-        }).success(callback);
-      }
-    }}
+.factory('Query',
+    ['$resource', function($resource) {
+       var resource = $resource('/solr/:core:handler', {core: '@core', handler: '@handler'}, {
+           "query": {
+               method: "GET", transformResponse: function (data) {
+                   return {data: data}
+               }
+           }
+       });
+       resource.url = function(params) {
+           var qs = [];
+           for (key in params) {
+               if (key != "core" && key != "handler" && key != "doNotIntercept") {
+                   for (var i in params[key]) {
+                       qs.push(key + "=" + params[key][i]);
+                   }
+               }
+           }
+           return "/solr/" + params.core + params.handler + "?" + qs.join("&");
+       }
+       return resource;
+    }])
+.factory('Segments',
+   ['$resource', function($resource) {
+       return $resource('/solr/:core/admin/segments', {'wt':'json', core: '@core', _:Date.now()}, {
+           get: {}
+       });
+   }
 ]);
-/*
-http://localhost:8983/solr/techproducts/admin/mbeans?cat=QUERYHANDLER&wt=json&_=1419614354276
-PING:
-http://localhost:8983/solr/techproducts/admin/ping?wt=json&ts=1419614393324&_=1419614393325
-*/
-
-

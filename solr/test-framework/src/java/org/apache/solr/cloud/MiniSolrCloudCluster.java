@@ -28,6 +28,7 @@ import org.apache.solr.common.cloud.SolrZkClient;
 import org.apache.solr.common.cloud.ZkConfigManager;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
+import org.apache.solr.common.params.CommonAdminParams;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.ExecutorUtil;
@@ -142,7 +143,6 @@ public class MiniSolrCloudCluster {
     }
 
     // tell solr to look in zookeeper for solr.xml
-    System.setProperty("solr.solrxml.location","zookeeper");
     System.setProperty("zkHost", zkServer.getZkAddress());
 
     List<Callable<JettySolrRunner>> startups = new ArrayList<>(numServers);
@@ -165,6 +165,29 @@ public class MiniSolrCloudCluster {
         startupError.addSuppressed(t);
       }
       throw startupError;
+    }
+
+    try (SolrZkClient zkClient = new SolrZkClient(zkServer.getZkHost(),
+        AbstractZkTestCase.TIMEOUT, 45000, null)) {
+      int numliveNodes = 0;
+      int retries = 60;
+      String liveNodesPath = "/solr/live_nodes";
+      // Wait up to 60 seconds for number of live_nodes to match up number of servers
+      do {
+        if (zkClient.exists(liveNodesPath, true)) {
+          numliveNodes = zkClient.getChildren(liveNodesPath, null, true).size();
+          if (numliveNodes == numServers) {
+            break;
+          }
+        }
+        retries--;
+        if (retries == 0) {
+          throw new IllegalStateException("Solr servers failed to register with ZK."
+              + " Current count: " + numliveNodes + "; Expected count: " + numServers);
+        }
+
+        Thread.sleep(1000);
+      } while (numliveNodes != numServers);
     }
 
     solrClient = buildSolrClient();
@@ -284,19 +307,43 @@ public class MiniSolrCloudCluster {
   
   public NamedList<Object> createCollection(String name, int numShards, int replicationFactor, 
       String configName, Map<String, String> collectionProperties) throws SolrServerException, IOException {
-    ModifiableSolrParams params = new ModifiableSolrParams();
+    return createCollection(name, numShards, replicationFactor, configName, null, null, collectionProperties);
+  }
+
+  public NamedList<Object> createCollection(String name, int numShards, int replicationFactor, 
+      String configName, String createNodeSet, String asyncId, Map<String, String> collectionProperties) throws SolrServerException, IOException {
+    final ModifiableSolrParams params = new ModifiableSolrParams();
     params.set(CoreAdminParams.ACTION, CollectionAction.CREATE.name());
     params.set(CoreAdminParams.NAME, name);
     params.set("numShards", numShards);
     params.set("replicationFactor", replicationFactor);
     params.set("collection.configName", configName);
+    if (null != createNodeSet) {
+      params.set(OverseerCollectionMessageHandler.CREATE_NODE_SET, createNodeSet);
+    }
+    if (null != asyncId) {
+      params.set(CommonAdminParams.ASYNC, asyncId);
+    }
     if(collectionProperties != null) {
       for(Map.Entry<String, String> property : collectionProperties.entrySet()){
         params.set(CoreAdminParams.PROPERTY_PREFIX + property.getKey(), property.getValue());
       }
     }
     
-    QueryRequest request = new QueryRequest(params);
+    return makeCollectionsRequest(params);
+  }
+
+  public NamedList<Object> deleteCollection(String name) throws SolrServerException, IOException {
+    final ModifiableSolrParams params = new ModifiableSolrParams();
+    params.set(CoreAdminParams.ACTION, CollectionAction.DELETE.name());
+    params.set(CoreAdminParams.NAME, name);
+
+    return makeCollectionsRequest(params);
+  }
+
+  private NamedList<Object> makeCollectionsRequest(final ModifiableSolrParams params) throws SolrServerException, IOException {
+    
+    final QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
     
     return solrClient.request(request);
@@ -330,7 +377,6 @@ public class MiniSolrCloudCluster {
       try {
         zkServer.shutdown();
       } finally {
-        System.clearProperty("solr.solrxml.location");
         System.clearProperty("zkHost");
       }
     }

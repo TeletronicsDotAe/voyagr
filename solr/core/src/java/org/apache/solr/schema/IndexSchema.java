@@ -99,6 +99,7 @@ public class IndexSchema {
   public static final String FIELD_TYPES = FIELD_TYPE + "s";
   public static final String INTERNAL_POLY_FIELD_PREFIX = "*" + FieldType.POLY_FIELD_SEPARATOR;
   public static final String LUCENE_MATCH_VERSION_PARAM = "luceneMatchVersion";
+  public static final String MAX_CHARS = "maxChars";
   public static final String NAME = "name";
   public static final String REQUIRED = "required";
   public static final String SCHEMA = "schema";
@@ -113,7 +114,6 @@ public class IndexSchema {
 
   private static final String AT = "@";
   private static final String DESTINATION_DYNAMIC_BASE = "destDynamicBase";
-  private static final String MAX_CHARS = "maxChars";
   private static final String SOLR_CORE_NAME = "solr.core.name";
   private static final String SOURCE_DYNAMIC_BASE = "sourceDynamicBase";
   private static final String SOURCE_EXPLICIT_FIELDS = "sourceExplicitFields";
@@ -1324,9 +1324,11 @@ public class IndexSchema {
         }
       }
     }
-    for (DynamicCopy dynamicCopy : dynamicCopyFields) {
-      if (dynamicCopy.getDestFieldName().equals(destField)) {
-        fieldNames.add(dynamicCopy.getRegex());
+    if (null != dynamicCopyFields) {
+      for (DynamicCopy dynamicCopy : dynamicCopyFields) {
+        if (dynamicCopy.getDestFieldName().equals(destField)) {
+          fieldNames.add(dynamicCopy.getRegex());
+        }
       }
     }
     return fieldNames;
@@ -1341,9 +1343,11 @@ public class IndexSchema {
   // This is useful when we need the maxSize param of each CopyField
   public List<CopyField> getCopyFieldsList(final String sourceField){
     final List<CopyField> result = new ArrayList<>();
-    for (DynamicCopy dynamicCopy : dynamicCopyFields) {
-      if (dynamicCopy.matches(sourceField)) {
-        result.add(new CopyField(getField(sourceField), dynamicCopy.getTargetField(sourceField), dynamicCopy.maxChars));
+    if (null != dynamicCopyFields) {
+      for (DynamicCopy dynamicCopy : dynamicCopyFields) {
+        if (dynamicCopy.matches(sourceField)) {
+          result.add(new CopyField(getField(sourceField), dynamicCopy.getTargetField(sourceField), dynamicCopy.maxChars));
+        }
       }
     }
     List<CopyField> fixedCopyFields = copyFieldsMap.get(sourceField);
@@ -1447,46 +1451,48 @@ public class IndexSchema {
         }
       }
     }
-    for (IndexSchema.DynamicCopy dynamicCopy : dynamicCopyFields) {
-      final String source = dynamicCopy.getRegex();
-      final String destination = dynamicCopy.getDestFieldName();
-      if (   (null == requestedSourceFields      || requestedSourceFields.contains(source))
-          && (null == requestedDestinationFields || requestedDestinationFields.contains(destination))) {
-        SimpleOrderedMap<Object> dynamicCopyProps = new SimpleOrderedMap<>();
+    if (null != dynamicCopyFields) {
+      for (IndexSchema.DynamicCopy dynamicCopy : dynamicCopyFields) {
+        final String source = dynamicCopy.getRegex();
+        final String destination = dynamicCopy.getDestFieldName();
+        if ((null == requestedSourceFields || requestedSourceFields.contains(source))
+            && (null == requestedDestinationFields || requestedDestinationFields.contains(destination))) {
+          SimpleOrderedMap<Object> dynamicCopyProps = new SimpleOrderedMap<>();
 
-        dynamicCopyProps.add(SOURCE, dynamicCopy.getRegex());
-        if (showDetails) {
-          IndexSchema.DynamicField sourceDynamicBase = dynamicCopy.getSourceDynamicBase();
-          if (null != sourceDynamicBase) {
-            dynamicCopyProps.add(SOURCE_DYNAMIC_BASE, sourceDynamicBase.getRegex());
-          } else if (source.contains("*")) {
-            List<String> sourceExplicitFields = new ArrayList<>();
-            Pattern pattern = Pattern.compile(source.replace("*", ".*"));   // glob->regex
-            for (String field : fields.keySet()) {
-              if (pattern.matcher(field).matches()) {
-                sourceExplicitFields.add(field);
+          dynamicCopyProps.add(SOURCE, dynamicCopy.getRegex());
+          if (showDetails) {
+            IndexSchema.DynamicField sourceDynamicBase = dynamicCopy.getSourceDynamicBase();
+            if (null != sourceDynamicBase) {
+              dynamicCopyProps.add(SOURCE_DYNAMIC_BASE, sourceDynamicBase.getRegex());
+            } else if (source.contains("*")) {
+              List<String> sourceExplicitFields = new ArrayList<>();
+              Pattern pattern = Pattern.compile(source.replace("*", ".*"));   // glob->regex
+              for (String field : fields.keySet()) {
+                if (pattern.matcher(field).matches()) {
+                  sourceExplicitFields.add(field);
+                }
+              }
+              if (sourceExplicitFields.size() > 0) {
+                Collections.sort(sourceExplicitFields);
+                dynamicCopyProps.add(SOURCE_EXPLICIT_FIELDS, sourceExplicitFields);
               }
             }
-            if (sourceExplicitFields.size() > 0) {
-              Collections.sort(sourceExplicitFields);
-              dynamicCopyProps.add(SOURCE_EXPLICIT_FIELDS, sourceExplicitFields);
+          }
+
+          dynamicCopyProps.add(DESTINATION, dynamicCopy.getDestFieldName());
+          if (showDetails) {
+            IndexSchema.DynamicField destDynamicBase = dynamicCopy.getDestDynamicBase();
+            if (null != destDynamicBase) {
+              dynamicCopyProps.add(DESTINATION_DYNAMIC_BASE, destDynamicBase.getRegex());
             }
           }
-        }
-        
-        dynamicCopyProps.add(DESTINATION, dynamicCopy.getDestFieldName());
-        if (showDetails) {
-          IndexSchema.DynamicField destDynamicBase = dynamicCopy.getDestDynamicBase();
-          if (null != destDynamicBase) {
-            dynamicCopyProps.add(DESTINATION_DYNAMIC_BASE, destDynamicBase.getRegex());
+
+          if (0 != dynamicCopy.getMaxChars()) {
+            dynamicCopyProps.add(MAX_CHARS, dynamicCopy.getMaxChars());
           }
-        }
 
-        if (0 != dynamicCopy.getMaxChars()) {
-          dynamicCopyProps.add(MAX_CHARS, dynamicCopy.getMaxChars());
+          copyFieldProperties.add(dynamicCopyProps);
         }
-
-        copyFieldProperties.add(dynamicCopyProps);
       }
     }
     return copyFieldProperties;
@@ -1662,11 +1668,32 @@ public class IndexSchema {
      * Requires synchronizing on the object returned by
      * {@link #getSchemaUpdateLock()}.
      *
+     * @see #addCopyFields(String,Collection,int) to limit the number of copied characters.
+     *
      * @param copyFields Key is the name of the source field name, value is a collection of target field names.  Fields must exist.
      * @param persist to persist the schema or not
      * @return The new Schema with the copy fields added
      */
   public IndexSchema addCopyFields(Map<String, Collection<String>> copyFields, boolean persist) {
+    String msg = "This IndexSchema is not mutable.";
+    log.error(msg);
+    throw new SolrException(ErrorCode.SERVER_ERROR, msg);
+  }
+
+  /**
+   * Copies this schema and adds the new copy fields to the copy.
+   * 
+   * Requires synchronizing on the object returned by 
+   * {@link #getSchemaUpdateLock()}
+   * 
+   * @param source source field name
+   * @param destinations collection of target field names
+   * @param maxChars max number of characters to copy from the source to each
+   *                 of the destinations.  Use {@link CopyField#UNLIMITED}
+   *                 if you don't want to limit the number of copied chars.
+   * @return The new Schema with the copy fields added
+   */
+  public IndexSchema addCopyFields(String source, Collection<String> destinations, int maxChars) {
     String msg = "This IndexSchema is not mutable.";
     log.error(msg);
     throw new SolrException(ErrorCode.SERVER_ERROR, msg);

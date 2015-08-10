@@ -36,7 +36,10 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.CoreContainer;
+import org.apache.solr.core.SolrCore;
 import org.apache.solr.servlet.SolrDispatchFilter;
+import org.apache.solr.update.UpdateHandler;
+import org.apache.solr.update.UpdateLog;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,12 +81,6 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
     fixShardCount(3);
   }
   
-  @Override
-  public void distribSetUp() throws Exception {
-    super.distribSetUp();
-    System.setProperty("numShards", Integer.toString(sliceCount));
-  }
-  
   /**
    * Overrides the parent implementation to install a SocketProxy in-front of the Jetty server.
    */
@@ -117,7 +114,7 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
 
     waitForThingsToLevelOut(30000);
 
-    log.info("HttpParitionTest succeeded ... shutting down now!");
+    log.info("HttpPartitionTest succeeded ... shutting down now!");
   }
 
   /**
@@ -162,9 +159,8 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
 
     // try to clean up
     try {
-      CollectionAdminRequest.Delete req = new CollectionAdminRequest.Delete();
-      req.setCollectionName(testCollectionName);
-      req.process(cloudClient);
+      new CollectionAdminRequest.Delete()
+              .setCollectionName(testCollectionName).process(cloudClient);
     } catch (Exception e) {
       // don't fail the test
       log.warn("Could not delete collection {} after test completed", testCollectionName);
@@ -208,7 +204,22 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
     
     // sent 3 docs in so far, verify they are on the leader and replica
     assertDocsExistInAllReplicas(notLeaders, testCollectionName, 1, 3);
-        
+
+    // Get the max version from the replica core to make sure it gets updated after recovery (see SOLR-7625)
+    JettySolrRunner replicaJetty = getJettyOnPort(getReplicaPort(notLeader));
+    SolrDispatchFilter filter = (SolrDispatchFilter)replicaJetty.getDispatchFilter().getFilter();
+    CoreContainer coreContainer = filter.getCores();
+    ZkCoreNodeProps replicaCoreNodeProps = new ZkCoreNodeProps(notLeader);
+    String coreName = replicaCoreNodeProps.getCoreName();
+    Long maxVersionBefore = null;
+    try (SolrCore core = coreContainer.getCore(coreName)) {
+      assertNotNull("Core '"+coreName+"' not found for replica: "+notLeader.getName(), core);
+      UpdateLog ulog = core.getUpdateHandler().getUpdateLog();
+      maxVersionBefore = ulog.getCurrentMaxVersion();
+    }
+    assertNotNull("max version bucket seed not set for core " + coreName, maxVersionBefore);
+    log.info("Looked up max version bucket seed "+maxVersionBefore+" for core "+coreName);
+
     // now up the stakes and do more docs
     int numDocs = 1000;
     boolean hasPartition = false;
@@ -235,7 +246,15 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
     }
     
     notLeaders = ensureAllReplicasAreActive(testCollectionName, "shard1", 1, 2, maxWaitSecsToSeeAllActive);
-    
+
+    try (SolrCore core = coreContainer.getCore(coreName)) {
+      assertNotNull("Core '" + coreName + "' not found for replica: " + notLeader.getName(), core);
+      Long currentMaxVersion = core.getUpdateHandler().getUpdateLog().getCurrentMaxVersion();
+      log.info("After recovery, looked up NEW max version bucket seed " + currentMaxVersion +
+          " for core " + coreName + ", was: " + maxVersionBefore);
+      assertTrue("max version bucket seed not updated after recovery!", currentMaxVersion > maxVersionBefore);
+    }
+
     // verify all docs received
     assertDocsExistInAllReplicas(notLeaders, testCollectionName, 1, numDocs + 3);
 
@@ -243,9 +262,8 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
 
     // try to clean up
     try {
-      CollectionAdminRequest.Delete req = new CollectionAdminRequest.Delete();
-      req.setCollectionName(testCollectionName);
-      req.process(cloudClient);
+      new CollectionAdminRequest.Delete()
+              .setCollectionName(testCollectionName).process(cloudClient);
     } catch (Exception e) {
       // don't fail the test
       log.warn("Could not delete collection {} after test completed", testCollectionName);
@@ -505,7 +523,7 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
     long startMs = System.currentTimeMillis();
 
     ZkStateReader zkr = cloudClient.getZkStateReader();
-    zkr.updateClusterState(true); // force the state to be fresh
+    zkr.updateClusterState(); // force the state to be fresh
 
     ClusterState cs = zkr.getClusterState();
     Collection<Slice> slices = cs.getActiveSlices(testCollectionName);
@@ -515,7 +533,7 @@ public class HttpPartitionTest extends AbstractFullDistribZkTestBase {
     while (waitMs < maxWaitMs && !allReplicasUp) {
       // refresh state every 2 secs
       if (waitMs % 2000 == 0)
-        cloudClient.getZkStateReader().updateClusterState(true);
+        cloudClient.getZkStateReader().updateClusterState();
 
       cs = cloudClient.getZkStateReader().getClusterState();
       assertNotNull(cs);

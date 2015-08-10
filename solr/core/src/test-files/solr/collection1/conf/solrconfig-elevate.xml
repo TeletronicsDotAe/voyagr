@@ -41,11 +41,6 @@
       <maxTime>3600000</maxTime> 
     </autoCommit>
     -->
-    <!-- represents a lower bound on the frequency that commits may
-    occur (in seconds). NOTE: not yet implemented
-    
-    <commitIntervalLowerBound>0</commitIntervalLowerBound>
-    -->
 
     <!-- The RunExecutableListener executes an external command.
          exe - the name of the executable to run
@@ -110,8 +105,6 @@
     <boolTofilterOptimizer enabled="false" cacheSize="32" threshold=".05"/>
 
   </query>
-
-  <requestHandler name="/update" class="solr.UpdateRequestHandler"  />
 
   <!-- test elevation -->
   <searchComponent name="elevate" class="org.apache.solr.handler.component.QueryElevationComponent" >

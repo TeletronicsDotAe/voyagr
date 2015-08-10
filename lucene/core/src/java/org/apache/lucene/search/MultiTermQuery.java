@@ -27,6 +27,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermContext;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.search.BooleanQuery.Builder;
 import org.apache.lucene.util.AttributeSource;
 
 /**
@@ -153,7 +154,7 @@ public abstract class MultiTermQuery extends Query {
    * 
    * @see #setRewriteMethod
    */
-  public static final class TopTermsScoringBooleanQueryRewrite extends TopTermsRewrite<BooleanQuery> {
+  public static final class TopTermsScoringBooleanQueryRewrite extends TopTermsRewrite<BooleanQuery.Builder> {
 
     /** 
      * Create a TopTermsScoringBooleanQueryRewrite for 
@@ -172,18 +173,76 @@ public abstract class MultiTermQuery extends Query {
     }
     
     @Override
-    protected BooleanQuery getTopLevelQuery() {
-      return new BooleanQuery(true);
+    protected BooleanQuery.Builder getTopLevelBuilder() {
+      BooleanQuery.Builder builder = new BooleanQuery.Builder();
+      builder.setDisableCoord(true);
+      return builder;
+    }
+
+    @Override
+    protected Query build(BooleanQuery.Builder builder) {
+      return builder.build();
     }
     
     @Override
-    protected void addClause(BooleanQuery topLevel, Term term, int docCount, float boost, TermContext states) {
+    protected void addClause(BooleanQuery.Builder topLevel, Term term, int docCount, float boost, TermContext states) {
       final TermQuery tq = new TermQuery(term, states);
       tq.setBoost(boost);
       topLevel.add(tq, BooleanClause.Occur.SHOULD);
     }
   }
   
+  /**
+   * A rewrite method that first translates each term into
+   * {@link BooleanClause.Occur#SHOULD} clause in a BooleanQuery, but adjusts
+   * the frequencies used for scoring to be blended across the terms, otherwise
+   * the rarest term typically ranks highest (often not useful eg in the set of
+   * expanded terms in a FuzzyQuery).
+   * 
+   * <p>
+   * This rewrite method only uses the top scoring terms so it will not overflow
+   * the boolean max clause count.
+   * 
+   * @see #setRewriteMethod
+   */
+  public static final class TopTermsBlendedFreqScoringRewrite extends
+      TopTermsRewrite<BlendedTermQuery.Builder> {
+
+    /**
+     * Create a TopTermsBlendedScoringBooleanQueryRewrite for at most
+     * <code>size</code> terms.
+     * <p>
+     * NOTE: if {@link BooleanQuery#getMaxClauseCount} is smaller than
+     * <code>size</code>, then it will be used instead.
+     */
+    public TopTermsBlendedFreqScoringRewrite(int size) {
+      super(size);
+    }
+
+    @Override
+    protected int getMaxSize() {
+      return BooleanQuery.getMaxClauseCount();
+    }
+
+    @Override
+    protected BlendedTermQuery.Builder getTopLevelBuilder() {
+      BlendedTermQuery.Builder builder = new BlendedTermQuery.Builder();
+      builder.setRewriteMethod(BlendedTermQuery.BOOLEAN_REWRITE);
+      return builder;
+    }
+
+    @Override
+    protected Query build(BlendedTermQuery.Builder builder) {
+      return builder.build();
+    }
+
+    @Override
+    protected void addClause(BlendedTermQuery.Builder topLevel, Term term, int docCount,
+        float boost, TermContext states) {
+      topLevel.add(term, boost, states);
+    }
+  }
+
   /**
    * A rewrite method that first translates each term into
    * {@link BooleanClause.Occur#SHOULD} clause in a BooleanQuery, but the scores
@@ -194,7 +253,7 @@ public abstract class MultiTermQuery extends Query {
    * 
    * @see #setRewriteMethod
    */
-  public static final class TopTermsBoostOnlyBooleanQueryRewrite extends TopTermsRewrite<BooleanQuery> {
+  public static final class TopTermsBoostOnlyBooleanQueryRewrite extends TopTermsRewrite<BooleanQuery.Builder> {
     
     /** 
      * Create a TopTermsBoostOnlyBooleanQueryRewrite for 
@@ -213,12 +272,19 @@ public abstract class MultiTermQuery extends Query {
     }
     
     @Override
-    protected BooleanQuery getTopLevelQuery() {
-      return new BooleanQuery(true);
+    protected BooleanQuery.Builder getTopLevelBuilder() {
+      BooleanQuery.Builder builder = new BooleanQuery.Builder();
+      builder.setDisableCoord(true);
+      return builder;
     }
     
     @Override
-    protected void addClause(BooleanQuery topLevel, Term term, int docFreq, float boost, TermContext states) {
+    protected Query build(BooleanQuery.Builder builder) {
+      return builder.build();
+    }
+    
+    @Override
+    protected void addClause(BooleanQuery.Builder topLevel, Term term, int docFreq, float boost, TermContext states) {
       final Query q = new ConstantScoreQuery(new TermQuery(term, states));
       q.setBoost(boost);
       topLevel.add(q, BooleanClause.Occur.SHOULD);

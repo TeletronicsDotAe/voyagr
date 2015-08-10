@@ -505,12 +505,16 @@ public class PostingsHighlighter {
       // if the segment has changed, we must initialize new enums.
       if (leaf != lastLeaf) {
         Terms t = r.terms(field);
-        if (!t.hasOffsets()) {
-          // no offsets available
-          throw new IllegalArgumentException("field '" + field + "' was indexed without offsets, cannot highlight");
+        if (t != null) {
+          if (!t.hasOffsets()) {
+            // no offsets available
+            throw new IllegalArgumentException("field '" + field + "' was indexed without offsets, cannot highlight");
+          }
+          termsEnum = t.iterator();
+          postings = new PostingsEnum[terms.length];
+        } else {
+          termsEnum = null;
         }
-        termsEnum = t.iterator();
-        postings = new PostingsEnum[terms.length];
       }
       if (termsEnum == null) {
         continue; // no terms for this field, nothing to do
@@ -562,7 +566,7 @@ public class PostingsHighlighter {
         if (!termsEnum.seekExact(terms[i])) {
           continue; // term not found
         }
-        de = postings[i] = termsEnum.postings(null, null, PostingsEnum.OFFSETS);
+        de = postings[i] = termsEnum.postings(null, PostingsEnum.OFFSETS);
         assert de != null;
         pDoc = de.advance(doc);
       } else {

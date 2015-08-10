@@ -46,6 +46,7 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.params.StatsParams;
+import org.apache.solr.common.params.FacetParams.FacetRangeMethod;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.handler.component.ShardResponse;
 import org.apache.solr.handler.component.StatsComponentTest.StatSetCombinations;
@@ -246,7 +247,17 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
           "facet.range",tlong,
           "facet.range.start",200, 
           "facet.range.gap",100, 
-          "facet.range.end",900);
+          "facet.range.end",900,
+          "facet.range.method", FacetRangeMethod.FILTER);
+    
+    // simple range facet on one field using dv method
+    query("q",facetQuery, "rows",100, "facet","true", 
+          "facet.range",tlong,
+          "facet.range",tlong,
+          "facet.range.start",200, 
+          "facet.range.gap",100, 
+          "facet.range.end",900,
+          "facet.range.method", FacetRangeMethod.DV);
 
     // range facet on multiple fields
     query("q",facetQuery, "rows",100, "facet","true", 
@@ -257,7 +268,9 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
           "facet.range.end",900,
           "facet.range.start",200, 
           "facet.range.gap",100, 
-          "f."+tlong+".facet.range.end",900);
+          "f."+tlong+".facet.range.end",900,
+          "f."+i1+".facet.range.method", FacetRangeMethod.FILTER,
+          "f."+tlong+".facet.range.method", FacetRangeMethod.DV);
     
     // range facet with "other" param
     QueryResponse response = query("q",facetQuery, "rows",100, "facet","true", 
@@ -409,7 +422,47 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", i1);
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", tdate_a);
     query("q","*:*", "sort",i1+" desc", "stats", "true", "stats.field", tdate_b);
-    
+
+
+    rsp = query("q", "*:*", "sort", i1 + " desc", "stats", "true", 
+                "stats.field", "{!cardinality='true'}" + oddField,
+                "stats.field", "{!cardinality='true'}" + tlong);
+
+    { // don't leak variabls
+
+      // long
+      FieldStatsInfo s = rsp.getFieldStatsInfo().get(tlong);
+      assertNotNull("missing stats", s);
+      assertEquals("wrong cardinality", new Long(13), s.getCardinality());
+      //
+      assertNull("expected null for min", s.getMin());
+      assertNull("expected null for mean", s.getMean());
+      assertNull("expected null for count", s.getCount());
+      assertNull("expected null for calcDistinct", s.getCountDistinct());
+      assertNull("expected null for distinct vals", s.getDistinctValues());
+      assertNull("expected null for max", s.getMax());
+      assertNull("expected null for missing", s.getMissing());
+      assertNull("expected null for stddev", s.getStddev());
+      assertNull("expected null for sum", s.getSum());
+      assertNull("expected null for percentiles", s.getSum());
+
+      // string
+      s = rsp.getFieldStatsInfo().get(oddField);
+      assertNotNull("missing stats", s);
+      assertEquals("wrong cardinality", new Long(1), s.getCardinality());
+      //
+      assertNull("expected null for min", s.getMin());
+      assertNull("expected null for mean", s.getMean());
+      assertNull("expected null for count", s.getCount());
+      assertNull("expected null for calcDistinct", s.getCountDistinct());
+      assertNull("expected null for distinct vals", s.getDistinctValues());
+      assertNull("expected null for max", s.getMax());
+      assertNull("expected null for missing", s.getMissing());
+      assertNull("expected null for stddev", s.getStddev());
+      assertNull("expected null for sum", s.getSum());
+      assertNull("expected null for percentiles", s.getSum());
+    }
+
     query("q", "*:*", "sort", i1 + " desc", "stats", "true", "stats.field",
         "{!percentiles='1,2,3,4,5'}" + i1);
     
@@ -497,6 +550,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       assertNull("expected null for stddev", s.getStddev());
       assertNull("expected null for sum", s.getSum());
       assertNull("expected null for percentiles", s.getPercentiles());
+      assertNull("expected null for cardinality", s.getCardinality());
 
       // sanity check deps relationship
       for (Stat dep : EnumSet.of(Stat.sum, Stat.count)) {
@@ -553,6 +607,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       assertNull("expected null for missing", s.getMissing());
       assertNull("expected null for sum", s.getSum());
       assertNull("expected null for percentiles", s.getPercentiles());
+      assertNull("expected null for cardinality", s.getCardinality());
     }
 
     // request stats, but disable them all via param refs
@@ -574,6 +629,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       assertNull("expected null for missing", s.getMissing());
       assertNull("expected null for sum", s.getSum());
       assertNull("expected null for percentiles", s.getPercentiles());
+      assertNull("expected null for cardinality", s.getCardinality());
     }
 
     final String[] stats = new String[] {
@@ -640,6 +696,12 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
         params("stats.calcdistinct", "false",
                "f."+i1+".stats.calcdistinct", "false",
                "stats.field", "{!min=true calcdistinct=true}" + i1),
+        params("stats.calcdistinct", "false",
+               "f."+i1+".stats.calcdistinct", "false",
+               "stats.field", "{!min=true countDistinct=true distinctValues=true}" + i1),
+        params("stats.field", "{!min=true countDistinct=true distinctValues=true}" + i1),
+        params("yes", "true",
+               "stats.field", "{!min=$yes countDistinct=$yes distinctValues=$yes}" + i1),
       }) {
       
       rsp = query(SolrParams.wrapDefaults
@@ -659,6 +721,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       assertNull(p+" expected null for stddev", s.getStddev());
       assertNull(p+" expected null for sum", s.getSum());
       assertNull(p+" expected null for percentiles", s.getPercentiles());
+      assertNull(p+" expected null for cardinality", s.getCardinality());
       
     }
 
@@ -675,6 +738,9 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
         params("stats.calcdistinct", "true",
                "f."+i1+".stats.calcdistinct", "true",
                "stats.field", "{!min=true calcdistinct=false}" + i1),
+        params("stats.calcdistinct", "true",
+               "f."+i1+".stats.calcdistinct", "true",
+               "stats.field", "{!min=true countDistinct=false distinctValues=false}" + i1),
       }) {
       
       rsp = query(SolrParams.wrapDefaults
@@ -693,8 +759,8 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       assertNull(p+" expected null for missing", s.getMissing());
       assertNull(p+" expected null for stddev", s.getStddev());
       assertNull(p+" expected null for sum", s.getSum());
-      assertNull(p+"expected null for percentiles", s.getPercentiles());
-      
+      assertNull(p+" expected null for percentiles", s.getPercentiles());
+      assertNull(p+" expected null for cardinality", s.getCardinality());
     }
 
     // this field doesn't exist in any doc in the result set.
@@ -719,6 +785,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       assertNull("expected null for missing", s.getMissing());
       assertNull("expected null for sum", s.getSum());
       assertNull("expected null for percentiles", s.getPercentiles());
+      assertNull("expected null for cardinality", s.getCardinality());
     }
 
     // look at stats on non numeric fields
@@ -780,8 +847,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     }
     assertEquals("Sanity check failed: either test broke, or test changed, or you adjusted Stat enum" + 
                  " (adjust constant accordingly if intentional)",
-                 3465, numTotalStatQueries);
-
+                 5082, numTotalStatQueries);
 
     /*** TODO: the failure may come back in "exception"
     try {
@@ -1105,6 +1171,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
   }
 
   private void validateCommonQueryParameters() throws Exception {
+    ignoreException("parameter cannot be negative");
     try {
       SolrQuery query = new SolrQuery();
       query.setStart(-1).setQuery("*");
@@ -1121,6 +1188,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
       fail("Expected the last query to fail, but got response: " + resp);
     } catch (SolrException e) {
       assertEquals(ErrorCode.BAD_REQUEST.code, e.code());
-   }
+    }
+    resetExceptionIgnores();
   }
 }

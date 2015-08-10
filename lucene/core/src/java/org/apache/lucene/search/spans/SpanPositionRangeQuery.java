@@ -38,17 +38,15 @@ public class SpanPositionRangeQuery extends SpanPositionCheckQuery {
     this.end = end;
   }
 
-
   @Override
   protected AcceptStatus acceptPosition(Spans spans) throws IOException {
     assert spans.startPosition() != spans.endPosition();
     AcceptStatus res = (spans.startPosition() >= end)
-                      ? AcceptStatus.NO_MORE_IN_CURRENT_DOC
-                      : (spans.startPosition() >= start && spans.endPosition() <= end)
-                      ? AcceptStatus.YES : AcceptStatus.NO;
+        ? AcceptStatus.NO_MORE_IN_CURRENT_DOC
+        : (spans.startPosition() >= start && spans.endPosition() <= end)
+        ? AcceptStatus.YES : AcceptStatus.NO;
     return res;
   }
-
 
   /**
    * @return The minimum position permitted in a match
@@ -85,20 +83,17 @@ public class SpanPositionRangeQuery extends SpanPositionCheckQuery {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (!(o instanceof SpanPositionRangeQuery)) return false;
-
+    if (! super.equals(o)) {
+      return false;
+    }
     SpanPositionRangeQuery other = (SpanPositionRangeQuery)o;
-    return this.end == other.end && this.start == other.start
-         && this.match.equals(other.match)
-         && this.getBoost() == other.getBoost();
+    return this.end == other.end && this.start == other.start;
   }
 
   @Override
   public int hashCode() {
-    int h = match.hashCode() ^ getClass().hashCode();
-    h ^= (h << 8) | (h >>> 25);  // reversible
-    h ^= Float.floatToRawIntBits(getBoost()) ^ end ^ start;
+    int h = super.hashCode() ^ end;
+    h = (h * 127) ^ start;
     return h;
   }
 

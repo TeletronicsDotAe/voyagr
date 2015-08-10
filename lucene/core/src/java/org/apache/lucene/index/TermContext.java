@@ -17,7 +17,6 @@ package org.apache.lucene.index;
  * limitations under the License.
  */
 
-import org.apache.lucene.codecs.BlockTermState;
 import org.apache.lucene.util.BytesRef;
 
 import java.io.IOException;
@@ -117,16 +116,31 @@ public final class TermContext {
    * should be derived from a {@link IndexReaderContext}'s leaf ord.
    */
   public void register(TermState state, final int ord, final int docFreq, final long totalTermFreq) {
+    register(state, ord);
+    accumulateStatistics(docFreq, totalTermFreq);
+  }
+
+  /**
+   * Expert: Registers and associates a {@link TermState} with an leaf ordinal. The
+   * leaf ordinal should be derived from a {@link IndexReaderContext}'s leaf ord.
+   * On the contrary to {@link #register(TermState, int, int, long)} this method
+   * does NOT update term statistics.
+   */
+  public void register(TermState state, final int ord) {
     assert state != null : "state must not be null";
     assert ord >= 0 && ord < states.length;
     assert states[ord] == null : "state for ord: " + ord
         + " already registered";
+    states[ord] = state;
+  }
+
+  /** Expert: Accumulate term statistics. */
+  public void accumulateStatistics(final int docFreq, final long totalTermFreq) {
     this.docFreq += docFreq;
     if (this.totalTermFreq >= 0 && totalTermFreq >= 0)
       this.totalTermFreq += totalTermFreq;
     else
       this.totalTermFreq = -1;
-    states[ord] = state;
   }
 
   /**
@@ -167,12 +181,11 @@ public final class TermContext {
    *
    *  @lucene.internal */
   public boolean hasOnlyRealTerms() {
-    for(TermState termState : states) {
-      if (termState instanceof BlockTermState && ((BlockTermState) termState).isRealTerm == false) {
+    for (TermState termState : states) {
+      if (termState != null && termState.isRealTerm() == false) {
         return false;
       }
     }
-
     return true;
   }
 

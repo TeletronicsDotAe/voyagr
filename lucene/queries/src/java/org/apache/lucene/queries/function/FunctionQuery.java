@@ -29,16 +29,14 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
-import org.apache.lucene.util.Bits;
 
 
 /**
  * Returns a score for each document based on a ValueSource,
  * often some function of the value of a field.
  *
- * <b>Note: This API is experimental and may change in non backward-compatible ways in the future</b>
- *
- *
+ * @see ValueSourceScorer
+ * @lucene.experimental
  */
 public class FunctionQuery extends Query {
   final ValueSource func;
@@ -89,13 +87,13 @@ public class FunctionQuery extends Query {
     }
 
     @Override
-    public Scorer scorer(LeafReaderContext context, Bits acceptDocs) throws IOException {
-      return new AllScorer(context, acceptDocs, this, queryWeight);
+    public Scorer scorer(LeafReaderContext context) throws IOException {
+      return new AllScorer(context, this, queryWeight);
     }
 
     @Override
     public Explanation explain(LeafReaderContext context, int doc) throws IOException {
-      return ((AllScorer)scorer(context, context.reader().getLiveDocs())).explain(doc);
+      return ((AllScorer)scorer(context)).explain(doc);
     }
   }
 
@@ -106,15 +104,13 @@ public class FunctionQuery extends Query {
     final float qWeight;
     int doc=-1;
     final FunctionValues vals;
-    final Bits acceptDocs;
 
-    public AllScorer(LeafReaderContext context, Bits acceptDocs, FunctionWeight w, float qWeight) throws IOException {
+    public AllScorer(LeafReaderContext context, FunctionWeight w, float qWeight) throws IOException {
       super(w);
       this.weight = w;
       this.qWeight = qWeight;
       this.reader = context.reader();
       this.maxDoc = reader.maxDoc();
-      this.acceptDocs = acceptDocs;
       vals = func.getValues(weight.context, context);
     }
 
@@ -129,21 +125,16 @@ public class FunctionQuery extends Query {
     // Boost:        foo:myTerm^floatline("myFloatField",1.0,0.0f)
     @Override
     public int nextDoc() throws IOException {
-      for(;;) {
-        ++doc;
-        if (doc>=maxDoc) {
-          return doc=NO_MORE_DOCS;
-        }
-        if (acceptDocs != null && !acceptDocs.get(doc)) continue;
-        return doc;
+      ++doc;
+      if (doc>=maxDoc) {
+        return doc=NO_MORE_DOCS;
       }
+      return doc;
     }
 
     @Override
     public int advance(int target) throws IOException {
-      // this will work even if target==NO_MORE_DOCS
-      doc=target-1;
-      return nextDoc();
+      return slowAdvance(target);
     }
 
     @Override

@@ -116,6 +116,9 @@ public abstract class CoreAdminParams
   
   public static final String TRANSIENT = "transient";
 
+  // Node to create a replica on for ADDREPLICA at least.
+  public static final String NODE = "node";
+
   public enum CoreAdminAction {
     STATUS,  
     LOAD,
@@ -138,8 +141,9 @@ public abstract class CoreAdminParams
     TRANSIENT,
     OVERSEEROP,
     REQUESTSTATUS,
-    REJOINLEADERELECTION;
-    
+    REJOINLEADERELECTION,
+    INVOKE;
+
     public static CoreAdminAction get( String p )
     {
       if( p != null ) {

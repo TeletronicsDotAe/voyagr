@@ -90,6 +90,16 @@ public final class BitUtil {
     0x8765421, 0x876543, 0x8765431, 0x8765432, 0x87654321
   };
 
+  // magic numbers for bit interleaving
+  private static final long MAGIC[] = {
+      0x5555555555555555L, 0x3333333333333333L,
+      0x0F0F0F0F0F0F0F0FL, 0x00FF00FF00FF00FFL,
+      0x0000FFFF0000FFFFL, 0x00000000FFFFFFFFL,
+      0xAAAAAAAAAAAAAAAAL
+  };
+  // shift values for bit interleaving
+  private static final short SHIFT[] = {1, 2, 4, 8, 16};
+
   private BitUtil() {} // no instance
 
   /** Return the number of bits sets in b. 
@@ -193,6 +203,46 @@ public final class BitUtil {
     return v;
   }
 
+  /**
+   * Interleaves the first 32 bits of each long value
+   *
+   * Adapted from: http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
+   */
+  public static long interleave(long v1, long v2) {
+    v1 = (v1 | (v1 << SHIFT[4])) & MAGIC[4];
+    v1 = (v1 | (v1 << SHIFT[3])) & MAGIC[3];
+    v1 = (v1 | (v1 << SHIFT[2])) & MAGIC[2];
+    v1 = (v1 | (v1 << SHIFT[1])) & MAGIC[1];
+    v1 = (v1 | (v1 << SHIFT[0])) & MAGIC[0];
+    v2 = (v2 | (v2 << SHIFT[4])) & MAGIC[4];
+    v2 = (v2 | (v2 << SHIFT[3])) & MAGIC[3];
+    v2 = (v2 | (v2 << SHIFT[2])) & MAGIC[2];
+    v2 = (v2 | (v2 << SHIFT[1])) & MAGIC[1];
+    v2 = (v2 | (v2 << SHIFT[0])) & MAGIC[0];
+
+    return (v2<<1) | v1;
+  }
+
+  /**
+   * Deinterleaves long value back to two concatenated 32bit values
+   */
+  public static long deinterleave(long b) {
+    b &= MAGIC[0];
+    b = (b ^ (b >>> SHIFT[0])) & MAGIC[1];
+    b = (b ^ (b >>> SHIFT[1])) & MAGIC[2];
+    b = (b ^ (b >>> SHIFT[2])) & MAGIC[3];
+    b = (b ^ (b >>> SHIFT[3])) & MAGIC[4];
+    b = (b ^ (b >>> SHIFT[4])) & MAGIC[5];
+    return b;
+  }
+
+  /**
+   * flip flops odd with even bits
+   */
+  public static final long flipFlop(final long b) {
+    return ((b & MAGIC[6]) >>> 1) | ((b & MAGIC[0]) << 1 );
+  }
+
    /** Same as {@link #zigZagEncode(long)} but on integers. */
    public static int zigZagEncode(int i) {
      return (i >> 31) ^ (i << 1);
@@ -218,64 +268,4 @@ public final class BitUtil {
      return ((l >>> 1) ^ -(l & 1));
    }
 
-
-  /** Select a 1-bit from a long. See also LUCENE-6040.
-   * @return The index of the r-th 1 bit in x. This bit must exist.
-   */
-  public static int select(long x, int r) {
-    long s = x - ((x & 0xAAAAAAAAAAAAAAAAL) >>> 1); // pairwise bitsums
-    s = (s & 0x3333333333333333L) + ((s >>> 2) & 0x3333333333333333L); // nibblewise bitsums
-    s = ((s + (s >>> 4)) & 0x0F0F0F0F0F0F0F0FL) * L8_L; // bytewise bitsums, cumulative
-
-    int b = (Long.numberOfTrailingZeros((s + psOverflow[r-1]) & (L8_L << 7)) >> 3) << 3; // bit position of byte with r-th 1 bit.
-    long l = r - (((s << 8) >>> b) & 0xFFL); // bit rank in byte at b
-
-    // Select bit l from byte (x >>> b):
-    int selectIndex = (int) (((x >>> b) & 0xFFL) | ((l-1) << 8));
-    int res = b + select256[selectIndex];
-    return res;
-  }
-
-  private final static long L8_L = 0x0101010101010101L;
-
-  private static final long[] psOverflow = new long[64];
-  static {
-    for (int s = 1; s <= 64; s++) {
-      psOverflow[s-1] = (128-s) * L8_L;
-    }
-  }
-
-  private static final byte[] select256 = new byte[8 * 256];
-  static {
-    for (int b = 0; b <= 0xFF; b++) {
-      for (int s = 1; s <= 8; s++) {
-        int byteIndex = b | ((s-1) << 8);
-        int bitIndex = selectNaive(b, s);
-        if (bitIndex < 0) {
-          bitIndex = 127; // positive as byte
-        }
-        assert bitIndex >= 0;
-        assert ((byte) bitIndex) >= 0; // non negative as byte, no need to mask the sign
-        select256[byteIndex] = (byte) bitIndex;
-      }
-    }
-  }
-
-  /**
-   * Naive implementation of {@link #select(long,int)}, using {@link Long#numberOfTrailingZeros} repetitively.
-   * Works relatively fast for low ranks.
-   * @return The index of the r-th 1 bit in x, or -1 if no such bit exists.
-   */
-  public static int selectNaive(long x, int r) {
-    assert r >= 1;
-    int s = -1;
-    while ((x != 0L) && (r > 0)) {
-      int ntz = Long.numberOfTrailingZeros(x);
-      x >>>= (ntz + 1);
-      s += (ntz + 1);
-      r -= 1;
-    }
-    int res = (r > 0) ? -1 : s;
-    return res;
-  }
 }

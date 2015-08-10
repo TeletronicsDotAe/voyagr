@@ -43,6 +43,7 @@ import org.apache.solr.schema.*;
 import org.apache.solr.search.facet.AggValueSource;
 import org.apache.solr.search.facet.AvgAgg;
 import org.apache.solr.search.facet.CountAgg;
+import org.apache.solr.search.facet.HLLAgg;
 import org.apache.solr.search.facet.MaxAgg;
 import org.apache.solr.search.facet.MinAgg;
 import org.apache.solr.search.facet.PercentileAgg;
@@ -53,6 +54,7 @@ import org.apache.solr.search.function.CollapseScoreFunction;
 import org.apache.solr.search.function.OrdFieldSource;
 import org.apache.solr.search.function.ReverseOrdFieldSource;
 import org.apache.solr.search.function.distance.*;
+import org.apache.solr.util.DateFormatUtil;
 import org.apache.solr.util.plugin.NamedListInitializedPlugin;
 
 import java.io.IOException;
@@ -396,6 +398,17 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
 
         String fieldName = fp.parseArg();
         SchemaField f = fp.getReq().getSchema().getField(fieldName);
+        if (fp.hasMoreArguments()) {
+          // multivalued selector option
+          String s = fp.parseArg();
+          FieldType.MultiValueSelector selector = FieldType.MultiValueSelector.lookup(s);
+          if (null == selector) {
+            throw new SolrException(SolrException.ErrorCode.BAD_REQUEST,
+                                    "Multi-Valued field selector '"+s+"' not spported");
+          }
+          return f.getType().getSingleValueSource(selector, f, fp);
+        }
+        // simple field ValueSource
         return f.getType().getValueSource(f, fp);
       }
     });
@@ -561,6 +574,7 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
         return new MinFloatFunction(sources.toArray(new ValueSource[sources.size()]));
       }
     });
+
     addParser("sqedist", new ValueSourceParser() {
       @Override
       public ValueSource parse(FunctionQParser fp) throws SyntaxError {
@@ -818,6 +832,13 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
       }
     });
 
+    addParser("agg_hll", new ValueSourceParser() {
+      @Override
+      public ValueSource parse(FunctionQParser fp) throws SyntaxError {
+        return new HLLAgg(fp.parseArg());
+      }
+    });
+
     addParser("agg_sum", new ValueSourceParser() {
       @Override
       public ValueSource parse(FunctionQParser fp) throws SyntaxError {
@@ -966,8 +987,6 @@ public abstract class ValueSourceParser implements NamedListInitializedPlugin {
 
 
 class DateValueSourceParser extends ValueSourceParser {
-  TrieDateField df = new TrieDateField();
-
   @Override
   public void init(NamedList args) {
   }
@@ -975,7 +994,7 @@ class DateValueSourceParser extends ValueSourceParser {
   public Date getDate(FunctionQParser fp, String arg) {
     if (arg == null) return null;
     if (arg.startsWith("NOW") || (arg.length() > 0 && Character.isDigit(arg.charAt(0)))) {
-      return df.parseMathLenient(null, arg, fp.req);
+      return DateFormatUtil.parseMathLenient(null, arg, fp.req);
     }
     return null;
   }

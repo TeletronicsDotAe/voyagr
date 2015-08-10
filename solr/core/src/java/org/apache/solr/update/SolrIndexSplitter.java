@@ -42,6 +42,7 @@ import org.apache.solr.common.cloud.DocRouter;
 import org.apache.solr.common.cloud.HashBasedRouter;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.schema.SchemaField;
+import org.apache.solr.search.BitsFilteredPostingsEnum;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.util.RefCounted;
 import org.slf4j.Logger;
@@ -168,6 +169,12 @@ public class SolrIndexSplitter {
     BytesRef term = null;
     PostingsEnum postingsEnum = null;
 
+    int[] docsMatchingRanges = null;
+    if (ranges != null) {
+      // +1 because documents can belong to *zero*, one, several or all ranges in rangesArr
+      docsMatchingRanges = new int[rangesArr.length+1];
+    }
+
     CharsRefBuilder idRef = new CharsRefBuilder();
     for (;;) {
       term = termsEnum.next();
@@ -195,7 +202,8 @@ public class SolrIndexSplitter {
         hash = hashRouter.sliceHash(idString, null, null, null);
       }
 
-      postingsEnum = termsEnum.postings(liveDocs, postingsEnum, PostingsEnum.NONE);
+      postingsEnum = termsEnum.postings(postingsEnum, PostingsEnum.NONE);
+      postingsEnum = BitsFilteredPostingsEnum.wrap(postingsEnum, liveDocs);
       for (;;) {
         int doc = postingsEnum.nextDoc();
         if (doc == DocIdSetIterator.NO_MORE_DOCS) break;
@@ -203,11 +211,37 @@ public class SolrIndexSplitter {
           docSets[currPartition].set(doc);
           currPartition = (currPartition + 1) % numPieces;
         } else  {
+          int matchingRangesCount = 0;
           for (int i=0; i<rangesArr.length; i++) {      // inner-loop: use array here for extra speed.
             if (rangesArr[i].includes(hash)) {
               docSets[i].set(doc);
+              ++matchingRangesCount;
             }
           }
+          docsMatchingRanges[matchingRangesCount]++;
+        }
+      }
+    }
+
+    if (docsMatchingRanges != null) {
+      for (int ii = 0; ii < docsMatchingRanges.length; ii++) {
+        if (0 == docsMatchingRanges[ii]) continue;
+        switch (ii) {
+          case 0:
+            // document loss
+            log.error("Splitting {}: {} documents belong to no shards and will be dropped",
+                reader, docsMatchingRanges[ii]);
+            break;
+          case 1:
+            // normal case, each document moves to one of the sub-shards
+            log.info("Splitting {}: {} documents will move into a sub-shard",
+                reader, docsMatchingRanges[ii]);
+            break;
+          default:
+            // document duplication
+            log.error("Splitting {}: {} documents will be moved to multiple ({}) sub-shards",
+                reader, docsMatchingRanges[ii], ii);
+            break;
         }
       }
     }

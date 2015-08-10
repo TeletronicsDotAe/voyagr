@@ -31,6 +31,7 @@ import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.common.util.Utils;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.handler.component.ShardHandlerFactory;
 import org.apache.solr.handler.component.ShardRequest;
@@ -105,7 +106,7 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
         DistributedQueue workQueue, DistributedMap runningMap,
         DistributedMap completedMap,
         DistributedMap failureMap) {
-      super(zkStateReader, myId, shardHandlerFactory, adminPath, new Overseer.Stats(), workQueue, runningMap, completedMap, failureMap);
+      super(zkStateReader, myId, shardHandlerFactory, adminPath, new Overseer.Stats(), null, new OverseerNodePrioritizer(zkStateReader, adminPath, shardHandlerFactory), workQueue, runningMap, completedMap, failureMap);
     }
     
     @Override
@@ -252,7 +253,7 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
       }
     }).anyTimes();
 
-    zkStateReaderMock.updateClusterState(anyBoolean());
+    zkStateReaderMock.updateClusterState();
 
     clusterStateMock.getCollections();
     expectLastCall().andAnswer(new IAnswer<Object>() {
@@ -330,6 +331,15 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
       }
     }).anyTimes();
 
+    solrZkClientMock.makePath(anyObject(String.class), anyObject(byte[].class), anyObject(CreateMode.class), anyBoolean());
+    expectLastCall().andAnswer(new IAnswer<String>() {
+      @Override
+      public String answer() throws Throwable {
+        String key = (String) getCurrentArguments()[0];
+        return key;
+      }
+    }).anyTimes();
+
     solrZkClientMock.exists(anyObject(String.class),anyBoolean());
     expectLastCall().andAnswer(new IAnswer<Boolean>() {
       @Override
@@ -392,24 +402,24 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
   
   protected void issueCreateJob(Integer numberOfSlices,
       Integer replicationFactor, Integer maxShardsPerNode, List<String> createNodeList, boolean sendCreateNodeList, boolean createNodeSetShuffle) {
-    Map<String,Object> propMap = ZkNodeProps.makeMap(
+    Map<String,Object> propMap = Utils.makeMap(
         Overseer.QUEUE_OPERATION, CollectionParams.CollectionAction.CREATE.toLower(),
         ZkStateReader.REPLICATION_FACTOR, replicationFactor.toString(),
         "name", COLLECTION_NAME,
         "collection.configName", CONFIG_NAME,
-        OverseerCollectionProcessor.NUM_SLICES, numberOfSlices.toString(),
+        OverseerCollectionMessageHandler.NUM_SLICES, numberOfSlices.toString(),
         ZkStateReader.MAX_SHARDS_PER_NODE, maxShardsPerNode.toString()
     );
     if (sendCreateNodeList) {
-      propMap.put(OverseerCollectionProcessor.CREATE_NODE_SET,
+      propMap.put(OverseerCollectionMessageHandler.CREATE_NODE_SET,
           (createNodeList != null)?StrUtils.join(createNodeList, ','):null);
-      if (OverseerCollectionProcessor.CREATE_NODE_SET_SHUFFLE_DEFAULT != createNodeSetShuffle || random().nextBoolean()) {
-        propMap.put(OverseerCollectionProcessor.CREATE_NODE_SET_SHUFFLE, createNodeSetShuffle);
+      if (OverseerCollectionMessageHandler.CREATE_NODE_SET_SHUFFLE_DEFAULT != createNodeSetShuffle || random().nextBoolean()) {
+        propMap.put(OverseerCollectionMessageHandler.CREATE_NODE_SET_SHUFFLE, createNodeSetShuffle);
       }
     }
 
     ZkNodeProps props = new ZkNodeProps(propMap);
-    QueueEvent qe = new QueueEvent("id", ZkStateReader.toJSON(props), null){
+    QueueEvent qe = new QueueEvent("id", Utils.toJSON(props), null){
       @Override
       public void setBytes(byte[] bytes) {
         lastProcessMessageResult = SolrResponse.deserialize( bytes);
@@ -580,7 +590,7 @@ public class OverseerCollectionProcessorTest extends SolrTestCaseJ4 {
       }
     }
     
-    if (random().nextBoolean()) Collections.shuffle(createNodeList, OverseerCollectionProcessor.RANDOM);
+    if (random().nextBoolean()) Collections.shuffle(createNodeList, OverseerCollectionMessageHandler.RANDOM);
     
     List<SubmitCapture> submitCaptures = null;
     if (collectionExceptedToBeCreated) {

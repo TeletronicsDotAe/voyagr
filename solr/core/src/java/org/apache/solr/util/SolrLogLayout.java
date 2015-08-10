@@ -13,6 +13,7 @@ import org.apache.solr.cloud.ZkController;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.StringUtils;
 import org.apache.solr.common.cloud.Replica;
+import org.apache.solr.common.util.SuppressForbidden;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
@@ -41,6 +42,7 @@ import static org.apache.solr.common.cloud.ZkStateReader.SHARD_ID_PROP;
  * limitations under the License.
  */
 
+@SuppressForbidden(reason = "class is specific to log4j")
 public class SolrLogLayout extends Layout {
   /**
    * Add this interface to a thread group and the string returned by getTag()
@@ -365,19 +367,19 @@ public class SolrLogLayout extends Layout {
 
   private void appendMDC(StringBuilder sb) {
     if (!StringUtils.isEmpty(MDC.get(NODE_NAME_PROP)))  {
-      sb.append(" N:").append(MDC.get(NODE_NAME_PROP));
+      sb.append(" n:").append(MDC.get(NODE_NAME_PROP));
     }
     if (!StringUtils.isEmpty(MDC.get(COLLECTION_PROP)))  {
-      sb.append(" C:").append(MDC.get(COLLECTION_PROP));
+      sb.append(" c:").append(MDC.get(COLLECTION_PROP));
     }
     if (!StringUtils.isEmpty(MDC.get(SHARD_ID_PROP))) {
-      sb.append(" S:").append(MDC.get(SHARD_ID_PROP));
+      sb.append(" s:").append(MDC.get(SHARD_ID_PROP));
     }
     if (!StringUtils.isEmpty(MDC.get(REPLICA_PROP))) {
-      sb.append(" R:").append(MDC.get(REPLICA_PROP));
+      sb.append(" r:").append(MDC.get(REPLICA_PROP));
     }
     if (!StringUtils.isEmpty(MDC.get(CORE_NAME_PROP))) {
-      sb.append(" c:").append(MDC.get(CORE_NAME_PROP));
+      sb.append(" x:").append(MDC.get(CORE_NAME_PROP));
     }
   }
 }

@@ -20,8 +20,11 @@ package org.apache.solr.search.facet;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.Fields;
@@ -37,6 +40,7 @@ import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
@@ -48,7 +52,7 @@ import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.SchemaField;
-import org.apache.solr.search.DocIterator;
+import org.apache.solr.schema.TrieField;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.search.HashDocSet;
 import org.apache.solr.search.SolrIndexSearcher;
@@ -61,12 +65,12 @@ public class FacetField extends FacetRequest {
   long limit = 10;
   long mincount = 1;
   boolean missing;
+  boolean allBuckets;   // show cumulative stats across all buckets (this can be different than non-bucketed stats across all docs because of multi-valued docs)
   boolean numBuckets;
   String prefix;
   String sortVariable;
   SortDirection sortDirection;
   FacetMethod method;
-  boolean allBuckets;   // show cumulative stats across all buckets (this can be different than non-bucketed stats across all docs because of multi-valued docs)
   int cacheDf;  // 0 means "default", -1 means "never cache"
 
   // TODO: put this somewhere more generic?
@@ -120,16 +124,27 @@ public class FacetField extends FacetRequest {
       return new FacetFieldProcessorStream(fcontext, this, sf);
     }
 
-    if (!multiToken || sf.hasDocValues()) {
+    org.apache.lucene.document.FieldType.NumericType ntype = ft.getNumericType();
+
+    if (sf.hasDocValues() && ntype==null) {
+      // single and multi-valued string docValues
       return new FacetFieldProcessorDV(fcontext, this, sf);
     }
 
-    if (multiToken) {
-      return new FacetFieldProcessorUIF(fcontext, this, sf);
-    } else {
-      // single valued string
-      return new FacetFieldProcessorFC(fcontext, this, sf);
+    if (!multiToken) {
+      if (sf.getType().getNumericType() != null) {
+        // single valued numeric (docvalues or fieldcache)
+        return new FacetFieldProcessorNumeric(fcontext, this, sf);
+      } else {
+        // single valued string...
+//        return new FacetFieldProcessorDV(fcontext, this, sf);
+        return new FacetFieldProcessorDV(fcontext, this, sf);
+        // what about FacetFieldProcessorFC?
+      }
     }
+
+    // Multi-valued field cache (UIF)
+    return new FacetFieldProcessorUIF(fcontext, this, sf);
   }
 
   @Override
@@ -142,8 +157,23 @@ public class FacetField extends FacetRequest {
 
 abstract class FacetFieldProcessor extends FacetProcessor<FacetField> {
   SchemaField sf;
-  SlotAcc sortAcc;
+  SlotAcc indexOrderAcc;
   int effectiveMincount;
+
+  Map<String,AggValueSource> deferredAggs;  // null if none
+
+  // TODO: push any of this down to base class?
+
+  //
+  // For sort="x desc", collectAcc would point to "x", and sortAcc would also point to "x".
+  // collectAcc would be used to accumulate all buckets, and sortAcc would be used to sort those buckets.
+  //
+  SlotAcc collectAcc;  // Accumulator to collect across entire domain (in addition to the countAcc).  May be null.
+  SlotAcc sortAcc;     // Accumulator to use for sorting *only* (i.e. not used for collection). May be an alias of countAcc, collectAcc, or indexOrderAcc
+  SlotAcc[] otherAccs; // Accumulators that do not need to be calculated across all buckets.
+
+  SpecialSlotAcc allBucketsAcc;  // this can internally refer to otherAccs and/or collectAcc. setNextReader should be called on otherAccs directly if they exist.
+
 
   FacetFieldProcessor(FacetContext fcontext, FacetField freq, SchemaField sf) {
     super(fcontext, freq);
@@ -156,25 +186,308 @@ abstract class FacetFieldProcessor extends FacetProcessor<FacetField> {
     return response;
   }
 
-  void setSortAcc(int numSlots) {
-    String sortKey = freq.sortVariable;
-    sortAcc = accMap.get(sortKey);
+  // This is used to create accs for second phase (or to create accs for all aggs)
+  @Override
+  protected void createAccs(int docCount, int slotCount) throws IOException {
+    if (accMap == null) {
+      accMap = new LinkedHashMap<>();
+    }
 
-    if (sortAcc == null) {
-      if ("count".equals(sortKey)) {
-        sortAcc = countAcc;
-      } else if ("index".equals(sortKey)) {
-        sortAcc = new SortSlotAcc(fcontext);
+    // allow a custom count acc to be used
+    if (countAcc == null) {
+      countAcc = new CountSlotArrAcc(fcontext, slotCount);
+      countAcc.key = "count";
+    }
+
+    if (accs != null) {
+      // reuse these accs, but reset them first
+      for (SlotAcc acc : accs) {
+        acc.reset();
+      }
+      return;
+    } else {
+      accs = new SlotAcc[ freq.getFacetStats().size() ];
+    }
+
+    int accIdx = 0;
+    for (Map.Entry<String,AggValueSource> entry : freq.getFacetStats().entrySet()) {
+      SlotAcc acc = null;
+      if (slotCount == 1) {
+        acc = accMap.get(entry.getKey());
+        if (acc != null) {
+          acc.reset();
+        }
+      }
+      if (acc == null) {
+        acc = entry.getValue().createSlotAcc(fcontext, docCount, slotCount);
+        acc.key = entry.getKey();
+        accMap.put(acc.key, acc);
+      }
+      accs[accIdx++] = acc;
+    }
+  }
+
+  void createCollectAcc(int numDocs, int numSlots) throws IOException {
+    accMap = new LinkedHashMap<>();
+
+    // we always count...
+    // allow a subclass to set a custom counter.
+    if (countAcc == null) {
+      countAcc = new CountSlotArrAcc(fcontext, numSlots);
+    }
+
+    if ("count".equals(freq.sortVariable)) {
+      sortAcc = countAcc;
+      deferredAggs = freq.getFacetStats();
+    } else if ("index".equals(freq.sortVariable)) {
+      // allow subclass to set indexOrderAcc first
+      if (indexOrderAcc == null) {
         // This sorting accumulator just goes by the slot number, so does not need to be collected
         // and hence does not need to find it's way into the accMap or accs array.
+        indexOrderAcc = new SortSlotAcc(fcontext);
+      }
+      sortAcc = indexOrderAcc;
+      deferredAggs = freq.getFacetStats();
+    } else {
+      AggValueSource sortAgg = freq.getFacetStats().get(freq.sortVariable);
+      if (sortAgg != null) {
+        collectAcc = sortAgg.createSlotAcc(fcontext, numDocs, numSlots);
+        collectAcc.key = freq.sortVariable; // TODO: improve this
+      }
+      sortAcc = collectAcc;
+      deferredAggs = new HashMap<>(freq.getFacetStats());
+      deferredAggs.remove(freq.sortVariable);
+    }
+
+    if (deferredAggs.size() == 0) {
+      deferredAggs = null;
+    }
+
+    boolean needOtherAccs = freq.allBuckets;  // TODO: use for missing too...
+
+    if (!needOtherAccs) {
+      // we may need them later, but we don't want to create them now
+      // otherwise we won't know if we need to call setNextReader on them.
+      return;
+    }
+
+    // create the deffered aggs up front for use by allBuckets
+    createOtherAccs(numDocs, 1);
+  }
+
+
+  void createOtherAccs(int numDocs, int numSlots) throws IOException {
+    if (otherAccs != null) {
+      // reuse existing accumulators
+      for (SlotAcc acc : otherAccs) {
+        acc.reset();  // todo - make reset take numDocs and numSlots?
+      }
+      return;
+    }
+
+    int numDeferred = deferredAggs == null ? 0 : deferredAggs.size();
+    if (numDeferred <= 0) return;
+
+    otherAccs = new SlotAcc[ numDeferred ];
+
+    int otherAccIdx = 0;
+    for (Map.Entry<String,AggValueSource> entry : deferredAggs.entrySet()) {
+      AggValueSource agg = entry.getValue();
+      SlotAcc acc = agg.createSlotAcc(fcontext, numDocs, numSlots);
+      acc.key = entry.getKey();
+      accMap.put(acc.key, acc);
+      otherAccs[otherAccIdx++] = acc;
+    }
+
+    if (numDeferred == freq.getFacetStats().size()) {
+      // accs and otherAccs are the same...
+      accs = otherAccs;
+    }
+  }
+
+
+  int collectFirstPhase(DocSet docs, int slot) throws IOException {
+    int num = -1;
+    if (collectAcc != null) {
+      num = collectAcc.collect(docs, slot);
+    }
+    if (allBucketsAcc != null) {
+      num = allBucketsAcc.collect(docs, slot);
+    }
+    return num >= 0 ? num : docs.size();
+  }
+
+  void collectFirstPhase(int segDoc, int slot) throws IOException {
+    if (collectAcc != null) {
+      collectAcc.collect(segDoc, slot);
+    }
+    if (allBucketsAcc != null) {
+      allBucketsAcc.collect(segDoc, slot);
+    }
+  }
+
+
+  void fillBucket(SimpleOrderedMap<Object> target, int count, int slotNum, DocSet subDomain, Query filter) throws IOException {
+    target.add("count", count);
+    if (count <= 0 && !freq.processEmpty) return;
+
+    if (collectAcc != null && slotNum >= 0) {
+      collectAcc.setValues(target, slotNum);
+    }
+
+    createOtherAccs(-1, 1);
+
+    if (otherAccs == null && freq.subFacets.isEmpty()) return;
+
+    if (subDomain == null) {
+      subDomain = fcontext.searcher.getDocSet(filter, fcontext.base);
+    }
+
+    // if no subFacets, we only need a DocSet
+    // otherwise we need more?
+    // TODO: save something generic like "slotNum" in the context and use that to implement things like filter exclusion if necessary?
+    // Hmmm, but we need to look up some stuff anyway (for the label?)
+    // have a method like "DocSet applyConstraint(facet context, DocSet parent)"
+    // that's needed for domain changing things like joins anyway???
+
+    if (otherAccs != null) {
+      // do acc at a time (traversing domain each time) or do all accs for each doc?
+      for (SlotAcc acc : otherAccs) {
+        acc.reset(); // TODO: only needed if we previously used for allBuckets or missing
+        acc.collect(subDomain, 0);
+        acc.setValues(target, 0);
+      }
+    }
+
+    processSubs(target, filter, subDomain);
+  }
+
+
+  @Override
+  protected void processStats(SimpleOrderedMap<Object> bucket, DocSet docs, int docCount) throws IOException {
+    if (docCount == 0 && !freq.processEmpty || freq.getFacetStats().size() == 0) {
+      bucket.add("count", docCount);
+      return;
+    }
+    createAccs(docCount, 1);
+    int collected = collect(docs, 0);
+
+    // countAcc.incrementCount(0, collected);  // should we set the counton the acc instead of just passing it?
+
+    assert collected == docCount;
+    addStats(bucket, collected, 0);
+  }
+
+  // overrides but with different signature!
+  void addStats(SimpleOrderedMap<Object> target, int count, int slotNum) throws IOException {
+    target.add("count", count);
+    if (count > 0 || freq.processEmpty) {
+      for (SlotAcc acc : accs) {
+        acc.setValues(target, slotNum);
+      }
+    }
+  }
+
+  @Override
+  void setNextReader(LeafReaderContext ctx) throws IOException {
+    // base class calls this (for missing bucket...) ...  go over accs[] in that case
+    super.setNextReader(ctx);
+  }
+
+  void setNextReaderFirstPhase(LeafReaderContext ctx) throws IOException {
+    if (collectAcc != null) {
+      collectAcc.setNextReader(ctx);
+    }
+    if (otherAccs != null) {
+      for (SlotAcc acc : otherAccs) {
+        acc.setNextReader(ctx);
       }
     }
   }
 
   static class Slot {
     int slot;
+    public int tiebreakCompare(int slotA, int slotB) {
+      return slotB - slotA;
+    }
   }
 }
+
+class SpecialSlotAcc extends SlotAcc {
+  SlotAcc collectAcc;
+  SlotAcc[] otherAccs;
+  int collectAccSlot;
+  int otherAccsSlot;
+  long count;
+
+  public SpecialSlotAcc(FacetContext fcontext, SlotAcc collectAcc, int collectAccSlot, SlotAcc[] otherAccs, int otherAccsSlot) {
+    super(fcontext);
+    this.collectAcc = collectAcc;
+    this.collectAccSlot = collectAccSlot;
+    this.otherAccs = otherAccs;
+    this.otherAccsSlot = otherAccsSlot;
+  }
+
+  public int getCollectAccSlot() { return collectAccSlot; }
+  public int getOtherAccSlot() { return otherAccsSlot; }
+
+  public long getSpecialCount() {
+    return count;
+  }
+
+  @Override
+  public void collect(int doc, int slot) throws IOException {
+    assert slot != collectAccSlot || slot < 0;
+    count++;
+    if (collectAcc != null) {
+      collectAcc.collect(doc, collectAccSlot);
+    }
+    if (otherAccs != null) {
+      for (SlotAcc otherAcc : otherAccs) {
+        otherAcc.collect(doc, otherAccsSlot);
+      }
+    }
+  }
+
+  @Override
+  public int compare(int slotA, int slotB) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public Object getValue(int slotNum) throws IOException {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void setValues(SimpleOrderedMap<Object> bucket, int slotNum) throws IOException {
+    if (collectAcc != null) {
+      collectAcc.setValues(bucket, collectAccSlot);
+    }
+    if (otherAccs != null) {
+      for (SlotAcc otherAcc : otherAccs) {
+        otherAcc.setValues(bucket, otherAccsSlot);
+      }
+    }
+  }
+
+  @Override
+  public void reset() {
+    // reset should be called on underlying accs
+    // TODO: but in case something does need to be done here, should we require this method to be called but do nothing for now?
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void resize(Resizer resizer) {
+    // someone else will call resize on collectAcc directly
+    if (collectAccSlot >= 0) {
+      collectAccSlot = resizer.getNewSlot(collectAccSlot);
+    }
+  }
+}
+
+
 
 
 // base class for FC style of facet counting (single and multi-valued strings)
@@ -185,8 +498,8 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
   int nTerms;
   int nDocs;
   int maxSlots;
-  int allBucketsSlot;
 
+  int allBucketsSlot = -1;  // slot for the primary Accs (countAcc, collectAcc)
 
   public FacetFieldProcessorFCBase(FacetContext fcontext, FacetField freq, SchemaField sf) {
     super(fcontext, freq, sf);
@@ -194,11 +507,13 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
 
   @Override
   public void process() throws IOException {
+    super.process();
     sf = fcontext.searcher.getSchema().getField(freq.field);
     response = getFieldCacheCounts();
   }
 
 
+  /** this BytesRef may be shared across calls and should be deep-cloned if necessary */
   abstract protected BytesRef lookupOrd(int ord) throws IOException;
   abstract protected void findStartAndEndOrds() throws IOException;
   abstract protected void collectDocs() throws IOException;
@@ -215,19 +530,17 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
 
     findStartAndEndOrds();
 
-    // if we need an extra slot for the "missing" bucket, and it wasn't able to be tacked onto the beginning,
-    // then lets add room for it at the end.
-    maxSlots = (freq.missing && startTermIndex != -1) ? nTerms + 1 : nTerms;
+    maxSlots = nTerms;
 
     if (freq.allBuckets) {
-      allBucketsSlot = maxSlots;
-      maxSlots++;
-    } else {
-      allBucketsSlot = -1;
+      allBucketsSlot = maxSlots++;
     }
-    createAccs(nDocs, maxSlots);
-    setSortAcc(maxSlots);
-    prepareForCollection();
+
+    createCollectAcc(nDocs, maxSlots);
+
+    if (freq.allBuckets) {
+      allBucketsAcc = new SpecialSlotAcc(fcontext, collectAcc, allBucketsSlot, otherAccs, 0);
+    }
 
     collectDocs();
 
@@ -248,7 +561,7 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
     // add a modest amount of over-request if this is a shard request
     int lim = freq.limit >= 0 ? (fcontext.isShard() ? (int)(freq.limit*1.1+4) : (int)freq.limit) : Integer.MAX_VALUE;
 
-    int maxsize = freq.limit > 0 ?  off + lim : Integer.MAX_VALUE - 1;
+    int maxsize = (int)(freq.limit > 0 ?  freq.offset + lim : Integer.MAX_VALUE - 1);
     maxsize = Math.min(maxsize, nTerms);
 
     final int sortMul = freq.sortDirection.getMultiplier();
@@ -263,8 +576,9 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
     };
 
     Slot bottom = null;
-    for (int i = (startTermIndex == -1) ? 1 : 0; i < nTerms; i++) {
-      if (countAcc.getCount(i) < effectiveMincount) {
+    for (int i = 0; i < nTerms; i++) {
+      // screen out buckets not matching mincount immediately (i.e. don't even increment numBuckets)
+      if (effectiveMincount > 0 && countAcc.getCount(i) < effectiveMincount) {
         continue;
       }
 
@@ -314,9 +628,9 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
 
     if (freq.allBuckets) {
       SimpleOrderedMap<Object> allBuckets = new SimpleOrderedMap<>();
-      countAcc.setValues(allBuckets, allBucketsSlot);
-      for (SlotAcc acc : accs) {
-        acc.setValues(allBuckets, allBucketsSlot);
+      allBuckets.add("count", allBucketsAcc.getSpecialCount());
+      if (allBucketsAcc != null) {
+        allBucketsAcc.setValues(allBuckets, allBucketsSlot);
       }
       res.add("allBuckets", allBuckets);
     }
@@ -324,6 +638,9 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
     ArrayList bucketList = new ArrayList(collectCount);
     res.add("buckets", bucketList);
 
+
+    // TODO: do this with a callback instead?
+    boolean needFilter = deferredAggs != null || freq.getSubFacets().size() > 0;
 
     for (int slotNum : sortedSlots) {
       SimpleOrderedMap<Object> bucket = new SimpleOrderedMap<>();
@@ -335,55 +652,17 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
       Object val = sf.getType().toObject(sf, br);
 
       bucket.add("val", val);
-      // add stats for this bucket
-      addStats(bucket, slotNum);
 
-      // handle sub-facets for this bucket
-      if (freq.getSubFacets().size() > 0) {
-        FacetContext subContext = fcontext.sub();
-        subContext.base = fcontext.searcher.getDocSet(new TermQuery(new Term(sf.getName(), br.clone())), fcontext.base);
-        try {
-          fillBucketSubs(bucket, subContext);
-        } finally {
-          // subContext.base.decref();  // OFF-HEAP
-          // subContext.base = null;  // do not modify context after creation... there may be deferred execution (i.e. streaming)
-        }
-      }
+      TermQuery filter = needFilter ? new TermQuery(new Term(sf.getName(), BytesRef.deepCopyOf(br))) : null;
+      fillBucket(bucket, countAcc.getCount(slotNum), slotNum, null, filter);
 
       bucketList.add(bucket);
     }
 
     if (freq.missing) {
       SimpleOrderedMap<Object> missingBucket = new SimpleOrderedMap<>();
-      DocSet missingDocSet = null;
-      try {
-        if (startTermIndex == -1) {
-          addStats(missingBucket, 0);
-        } else {
-          missingDocSet = getFieldMissing(fcontext.searcher, fcontext.base, freq.field);
-          // an extra slot was added to the end for this missing bucket
-          countAcc.incrementCount(nTerms, missingDocSet.size());
-          collect(missingDocSet, nTerms);
-          addStats(missingBucket, nTerms);
-        }
-
-        if (freq.getSubFacets().size() > 0) {
-          FacetContext subContext = fcontext.sub();
-          // TODO: we can do better than this!
-          if (missingDocSet == null) {
-            missingDocSet = getFieldMissing(fcontext.searcher, fcontext.base, freq.field);
-          }
-          subContext.base = missingDocSet;
-          fillBucketSubs(missingBucket, subContext);
-        }
-
-        res.add("missing", missingBucket);
-      } finally {
-        if (missingDocSet != null) {
-          // missingDocSet.decref(); // OFF-HEAP
-          missingDocSet = null;
-        }
-      }
+      fillBucket(missingBucket, getFieldMissingQuery(fcontext.searcher, freq.field), null);
+      res.add("missing", missingBucket);
     }
 
     return res;
@@ -393,76 +672,163 @@ abstract class FacetFieldProcessorFCBase extends FacetFieldProcessor {
 }
 
 
-class FacetFieldProcessorFC extends FacetFieldProcessorFCBase {
-  SortedDocValues sortedDocValues;
+class FacetFieldProcessorDV extends FacetFieldProcessorFCBase {
+  static boolean unwrap_singleValued_multiDv = true;  // only set to false for test coverage
+
+  boolean multiValuedField;
+  SortedSetDocValues si;  // only used for term lookups (for both single and multi-valued)
+  MultiDocValues.OrdinalMap ordinalMap = null; // maps per-segment ords to global ords
 
 
-  public FacetFieldProcessorFC(FacetContext fcontext, FacetField freq, SchemaField sf) {
+  public FacetFieldProcessorDV(FacetContext fcontext, FacetField freq, SchemaField sf) {
     super(fcontext, freq, sf);
+    multiValuedField = sf.multiValued() || sf.getType().multiValuedFieldCache();
   }
 
   protected BytesRef lookupOrd(int ord) throws IOException {
-    return sortedDocValues.lookupOrd(ord);
+    return si.lookupOrd(ord);
   }
 
   protected void findStartAndEndOrds() throws IOException {
-    sortedDocValues = FieldUtil.getSortedDocValues(fcontext.qcontext, sf, null);
+    if (multiValuedField) {
+      si = FieldUtil.getSortedSetDocValues(fcontext.qcontext, sf, null);
+      if (si instanceof MultiDocValues.MultiSortedSetDocValues) {
+        ordinalMap = ((MultiDocValues.MultiSortedSetDocValues)si).mapping;
+      }
+    } else {
+      SortedDocValues single = FieldUtil.getSortedDocValues(fcontext.qcontext, sf, null);
+      si = DocValues.singleton(single);  // multi-valued view
+      if (single instanceof MultiDocValues.MultiSortedDocValues) {
+        ordinalMap = ((MultiDocValues.MultiSortedDocValues)single).mapping;
+      }
+    }
+
+    if (si.getValueCount() >= Integer.MAX_VALUE) {
+      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Field has too many unique values. field=" + sf + " nterms= " + si.getValueCount());
+    }
 
     if (prefixRef != null) {
-      startTermIndex = sortedDocValues.lookupTerm(prefixRef.get());
+      startTermIndex = (int)si.lookupTerm(prefixRef.get());
       if (startTermIndex < 0) startTermIndex = -startTermIndex - 1;
       prefixRef.append(UnicodeUtil.BIG_TERM);
-      endTermIndex = sortedDocValues.lookupTerm(prefixRef.get());
+      endTermIndex = (int)si.lookupTerm(prefixRef.get());
       assert endTermIndex < 0;
       endTermIndex = -endTermIndex - 1;
     } else {
       startTermIndex = 0;
-      endTermIndex = sortedDocValues.getValueCount();
+      endTermIndex = (int)si.getValueCount();
     }
-
-    // optimize collecting the "missing" bucket when startTermindex is 0 (since the "missing" ord is -1)
-    startTermIndex = startTermIndex==0 && freq.missing ? -1 : startTermIndex;
 
     nTerms = endTermIndex - startTermIndex;
   }
 
+  @Override
   protected void collectDocs() throws IOException {
+    if (nTerms <= 0 || fcontext.base.size() < effectiveMincount) { // TODO: what about allBuckets? missing bucket?
+      return;
+    }
+
     final List<LeafReaderContext> leaves = fcontext.searcher.getIndexReader().leaves();
-    final Iterator<LeafReaderContext> ctxIt = leaves.iterator();
-    LeafReaderContext ctx = null;
-    int segBase = 0;
-    int segMax;
-    int adjustedMax = 0;
-    for (DocIterator docsIt = fcontext.base.iterator(); docsIt.hasNext(); ) {
-      final int doc = docsIt.nextDoc();
-      if (doc >= adjustedMax) {
-        do {
-          ctx = ctxIt.next();
-          segBase = ctx.docBase;
-          segMax = ctx.reader().maxDoc();
-          adjustedMax = segBase + segMax;
-        } while (doc >= adjustedMax);
-        assert doc >= ctx.docBase;
-        setNextReader(ctx);
+    Filter filter = fcontext.base.getTopFilter();
+
+    for (int subIdx = 0; subIdx < leaves.size(); subIdx++) {
+      LeafReaderContext subCtx = leaves.get(subIdx);
+
+      setNextReaderFirstPhase(subCtx);
+
+      DocIdSet dis = filter.getDocIdSet(subCtx, null); // solr docsets already exclude any deleted docs
+      DocIdSetIterator disi = dis.iterator();
+
+      SortedDocValues singleDv = null;
+      SortedSetDocValues multiDv = null;
+      if (multiValuedField) {
+        // TODO: get sub from multi?
+        multiDv = subCtx.reader().getSortedSetDocValues(sf.getName());
+        if (multiDv == null) {
+          multiDv = DocValues.emptySortedSet();
+        }
+        // some codecs may optimize SortedSet storage for single-valued fields
+        // this will be null if this is not a wrapped single valued docvalues.
+        if (unwrap_singleValued_multiDv) {
+          singleDv = DocValues.unwrapSingleton(multiDv);
+        }
+      } else {
+        singleDv = subCtx.reader().getSortedDocValues(sf.getName());
+        if (singleDv == null) {
+          singleDv = DocValues.emptySorted();
+        }
       }
 
-      int term = sortedDocValues.getOrd( doc );
-      int arrIdx = term - startTermIndex;
-      if (arrIdx>=0 && arrIdx<nTerms) {
-        countAcc.incrementCount(arrIdx, 1);
-        collect(doc - segBase, arrIdx);  // per-seg collectors
-        if (allBucketsSlot >= 0 && term >= 0) {
-          countAcc.incrementCount(allBucketsSlot, 1);
-          collect(doc - segBase, allBucketsSlot);  // per-seg collectors
-        }
+      LongValues toGlobal = ordinalMap == null ? null : ordinalMap.getGlobalOrds(subIdx);
+
+      if (singleDv != null) {
+        collectDocs(singleDv, disi, toGlobal);
+      } else {
+        collectDocs(multiDv, disi, toGlobal);
+      }
+    }
+
+  }
+
+  protected void collectDocs(SortedDocValues singleDv, DocIdSetIterator disi, LongValues toGlobal) throws IOException {
+    int doc;
+    while ((doc = disi.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+      int segOrd = singleDv.getOrd(doc);
+      if (segOrd < 0) continue;
+      collect(doc, segOrd, toGlobal);
+    }
+  }
+
+  protected void collectDocs(SortedSetDocValues multiDv, DocIdSetIterator disi, LongValues toGlobal) throws IOException {
+    int doc;
+    while ((doc = disi.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+      multiDv.setDocument(doc);
+      for(;;) {
+        int segOrd = (int)multiDv.nextOrd();
+        if (segOrd < 0) break;
+        collect(doc, segOrd, toGlobal);
+      }
+    }
+  }
+
+  private void collect(int doc, int segOrd, LongValues toGlobal) throws IOException {
+    int ord = (toGlobal != null && segOrd >= 0) ? (int)toGlobal.get(segOrd) : segOrd;
+
+    int arrIdx = ord - startTermIndex;
+    if (arrIdx >= 0 && arrIdx < nTerms) {
+      countAcc.incrementCount(arrIdx, 1);
+      if (collectAcc != null) {
+        collectAcc.collect(doc, arrIdx);
+      }
+      if (allBucketsAcc != null) {
+        allBucketsAcc.collect(doc, arrIdx);
       }
     }
   }
 
 }
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // UnInvertedField implementation of field faceting
-class FacetFieldProcessorUIF extends FacetFieldProcessorFC {
+class FacetFieldProcessorUIF extends FacetFieldProcessorFCBase {
   UnInvertedField uif;
   TermsEnum te;
 
@@ -542,6 +908,8 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
 
   @Override
   public void process() throws IOException {
+    super.process();
+
     // We need to keep the fcontext open after processing is done (since we will be streaming in the response writer).
     // But if the connection is broken, we want to clean up.
     // fcontext.base.incref();  // OFF-HEAP
@@ -596,10 +964,7 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
     hasSubFacets = freq.subFacets.size() > 0;
     bucketsToSkip = freq.offset;
 
-
-
     createAccs(-1, 1);
-    prepareForCollection();
 
     // Minimum term docFreq in order to use the filterCache for that term.
     int defaultMinDf = Math.max(fcontext.searcher.maxDoc() >> 4, 3);  // (minimum of 3 is for test coverage purposes)
@@ -612,6 +977,11 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
     if (freq.prefix != null) {
       String indexedPrefix = sf.getType().toInternal(freq.prefix);
       startTermBytes = new BytesRef(indexedPrefix);
+    } else if (sf.getType().getNumericType() != null) {
+      String triePrefix = TrieField.getMainValuePrefix(sf.getType());
+      if (triePrefix != null) {
+        startTermBytes = new BytesRef(triePrefix);
+      }
     }
 
     Fields fields = fcontext.searcher.getLeafReader().fields();
@@ -644,8 +1014,6 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
 
     List<LeafReaderContext> leafList = fcontext.searcher.getTopReaderContext().leaves();
     leaves = leafList.toArray( new LeafReaderContext[ leafList.size() ]);
-
-
   }
 
 
@@ -722,7 +1090,7 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
             }
           }
           // iterate over TermDocs to calculate the intersection
-          postingsEnum = termsEnum.postings(null, postingsEnum, PostingsEnum.NONE);
+          postingsEnum = termsEnum.postings(postingsEnum, PostingsEnum.NONE);
 
           if (postingsEnum instanceof MultiPostingsEnum) {
             MultiPostingsEnum.EnumWithSlice[] subs = ((MultiPostingsEnum) postingsEnum).getSubs();
@@ -790,13 +1158,15 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
 
         // OK, we have a good bucket to return... first get bucket value before moving to next term
         Object bucketVal = sf.getType().toObject(sf, term);
+        BytesRef termCopy = BytesRef.deepCopyOf(term);
         term = termsEnum.next();
 
         SimpleOrderedMap<Object> bucket = new SimpleOrderedMap<>();
         bucket.add("val", bucketVal);
         addStats(bucket, 0);
         if (hasSubFacets) {
-          processSubs(bucket, termSet);
+          TermQuery filter = new TermQuery(new Term(freq.field, termCopy));
+          processSubs(bucket, filter, termSet);
         }
 
         // TODO... termSet needs to stick around for streaming sub-facets?
@@ -822,143 +1192,3 @@ class FacetFieldProcessorStream extends FacetFieldProcessor implements Closeable
 }
 
 
-
-class FacetFieldProcessorDV extends FacetFieldProcessorFCBase {
-  static boolean unwrap_singleValued_multiDv = true;  // only set to false for test coverage
-
-  boolean multiValuedField;
-  SortedSetDocValues si;  // only used for term lookups (for both single and multi-valued)
-  MultiDocValues.OrdinalMap ordinalMap = null; // maps per-segment ords to global ords
-
-
-  public FacetFieldProcessorDV(FacetContext fcontext, FacetField freq, SchemaField sf) {
-    super(fcontext, freq, sf);
-    multiValuedField = sf.multiValued() || sf.getType().multiValuedFieldCache();
-  }
-
-  protected BytesRef lookupOrd(int ord) throws IOException {
-    return si.lookupOrd(ord);
-  }
-
-  protected void findStartAndEndOrds() throws IOException {
-    if (multiValuedField) {
-      si = FieldUtil.getSortedSetDocValues(fcontext.qcontext, sf, null);
-      if (si instanceof MultiDocValues.MultiSortedSetDocValues) {
-        ordinalMap = ((MultiDocValues.MultiSortedSetDocValues)si).mapping;
-      }
-    } else {
-      SortedDocValues single = FieldUtil.getSortedDocValues(fcontext.qcontext, sf, null);
-      si = DocValues.singleton(single);  // multi-valued view
-      if (single instanceof MultiDocValues.MultiSortedDocValues) {
-        ordinalMap = ((MultiDocValues.MultiSortedDocValues)single).mapping;
-      }
-    }
-
-    if (si.getValueCount() >= Integer.MAX_VALUE) {
-      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Field has too many unique values. field=" + sf + " nterms= " + si.getValueCount());
-    }
-
-    if (prefixRef != null) {
-      startTermIndex = (int)si.lookupTerm(prefixRef.get());
-      if (startTermIndex < 0) startTermIndex = -startTermIndex - 1;
-      prefixRef.append(UnicodeUtil.BIG_TERM);
-      endTermIndex = (int)si.lookupTerm(prefixRef.get());
-      assert endTermIndex < 0;
-      endTermIndex = -endTermIndex - 1;
-    } else {
-      startTermIndex = 0;
-      endTermIndex = (int)si.getValueCount();
-    }
-
-    // optimize collecting the "missing" bucket when startTermindex is 0 (since the "missing" ord is -1)
-    startTermIndex = startTermIndex==0 && freq.missing ? -1 : startTermIndex;
-
-    nTerms = endTermIndex - startTermIndex;
-  }
-
-  @Override
-  protected void collectDocs() throws IOException {
-     if (nTerms <= 0 || fcontext.base.size() < effectiveMincount) { // TODO: what about allBuckets? missing bucket?
-       return;
-     }
-
-    final List<LeafReaderContext> leaves = fcontext.searcher.getIndexReader().leaves();
-    Filter filter = fcontext.base.getTopFilter();
-
-    for (int subIdx = 0; subIdx < leaves.size(); subIdx++) {
-      LeafReaderContext subCtx = leaves.get(subIdx);
-
-      setNextReader(subCtx);
-
-      DocIdSet dis = filter.getDocIdSet(subCtx, null); // solr docsets already exclude any deleted docs
-      DocIdSetIterator disi = dis.iterator();
-
-      SortedDocValues singleDv = null;
-      SortedSetDocValues multiDv = null;
-      if (multiValuedField) {
-        // TODO: get sub from multi?
-        multiDv = subCtx.reader().getSortedSetDocValues(sf.getName());
-        if (multiDv == null) {
-          multiDv = DocValues.emptySortedSet();
-        }
-        // some codecs may optimize SortedSet storage for single-valued fields
-        // this will be null if this is not a wrapped single valued docvalues.
-        if (unwrap_singleValued_multiDv) {
-          singleDv = DocValues.unwrapSingleton(multiDv);
-        }
-      } else {
-        singleDv = subCtx.reader().getSortedDocValues(sf.getName());
-        if (singleDv == null) {
-          singleDv = DocValues.emptySorted();
-        }
-      }
-
-      LongValues toGlobal = ordinalMap == null ? null : ordinalMap.getGlobalOrds(subIdx);
-
-      if (singleDv != null) {
-        collectDocs(singleDv, disi, toGlobal);
-      } else {
-        collectDocs(multiDv, disi, toGlobal);
-      }
-    }
-
-  }
-
-  protected void collectDocs(SortedDocValues singleDv, DocIdSetIterator disi, LongValues toGlobal) throws IOException {
-    int doc;
-    while ((doc = disi.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
-      int segOrd = singleDv.getOrd(doc);
-      collect(doc, segOrd, toGlobal);
-    }
-  }
-
-  protected void collectDocs(SortedSetDocValues multiDv, DocIdSetIterator disi, LongValues toGlobal) throws IOException {
-    int doc;
-    while ((doc = disi.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
-      multiDv.setDocument(doc);
-      int segOrd = (int)multiDv.nextOrd();
-      collect(doc, segOrd, toGlobal); // collect anything the first time (even -1 for missing)
-      if (segOrd < 0) continue;
-      for(;;) {
-        segOrd = (int)multiDv.nextOrd();
-        if (segOrd < 0) break;
-        collect(doc, segOrd, toGlobal);
-      }
-    }
-  }
-
-  private void collect(int doc, int segOrd, LongValues toGlobal) throws IOException {
-    int ord = (toGlobal != null && segOrd >= 0) ? (int)toGlobal.get(segOrd) : segOrd;
-
-    int arrIdx = ord - startTermIndex;
-    if (arrIdx >= 0 && arrIdx < nTerms) {
-      countAcc.incrementCount(arrIdx, 1);
-      collect(doc, arrIdx);  // per-seg collectors
-      if (allBucketsSlot >= 0 && ord >= 0) {
-        countAcc.incrementCount(allBucketsSlot, 1);
-        collect(doc, allBucketsSlot);  // per-seg collectors
-      }
-    }
-  }
-
-}

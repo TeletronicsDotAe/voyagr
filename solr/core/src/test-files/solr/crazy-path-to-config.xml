@@ -26,9 +26,7 @@
 
   <xi:include href="collection1/conf/solrconfig.snippet.randomindexconfig.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
-  <updateHandler class="solr.DirectUpdateHandler2">
-    <commitIntervalLowerBound>0</commitIntervalLowerBound>
-  </updateHandler>
+  <updateHandler class="solr.DirectUpdateHandler2"/>
 
   <query>
     <maxBooleanClauses>1024</maxBooleanClauses>
@@ -44,8 +42,6 @@
       <str name="fl">implicit</str>
     </lst>
   </requestHandler>
-  <requestHandler name="/update" class="solr.UpdateRequestHandler"  />
-  
   
   <queryResponseWriter name="standard" class="solr.XMLResponseWriter"/>
   <queryResponseWriter name="useless" class="org.apache.solr.OutputWriterTest$UselessOutputWriter" startup="lazy"/>

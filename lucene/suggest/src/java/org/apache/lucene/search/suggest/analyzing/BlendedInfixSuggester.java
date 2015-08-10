@@ -35,6 +35,7 @@ import org.apache.lucene.index.MultiDocValues;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.TopFieldDocs;
@@ -175,6 +176,12 @@ public class BlendedInfixSuggester extends AnalyzingInfixSuggester {
   }
 
   @Override
+  public List<Lookup.LookupResult> lookup(CharSequence key, BooleanQuery contextQuery, int num, boolean allTermsRequired, boolean doHighlight) throws IOException {
+    // here we multiply the number of searched element by the defined factor
+    return super.lookup(key, contextQuery, num * numFactor, allTermsRequired, doHighlight);
+  }
+  
+  @Override
   protected FieldType getTextFieldType() {
     FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
     ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
@@ -281,7 +288,7 @@ public class BlendedInfixSuggester extends AnalyzingInfixSuggester {
 
       if (matchedTokens.contains(docTerm) || (prefixToken != null && docTerm.startsWith(prefixToken))) {
  
-        PostingsEnum docPosEnum = it.postings(null, null, PostingsEnum.OFFSETS);
+        PostingsEnum docPosEnum = it.postings(null, PostingsEnum.OFFSETS);
         docPosEnum.nextDoc();
 
         // use the first occurrence of the term
@@ -335,9 +342,19 @@ public class BlendedInfixSuggester extends AnalyzingInfixSuggester {
       }
 
       // otherwise on alphabetic order
-      return CHARSEQUENCE_COMPARATOR.compare(o1.key, o2.key);
+      int keyCompare = CHARSEQUENCE_COMPARATOR.compare(o1.key, o2.key);
+
+      if (keyCompare != 0) {
+        return keyCompare;
+      }
+
+      // if same weight and title, use the payload if there is one
+      if (o1.payload != null) {
+        return o1.payload.compareTo(o2.payload);
+      }
+
+      return 0;
     }
   }
-
 }
 

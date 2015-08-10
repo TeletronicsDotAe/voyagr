@@ -59,11 +59,6 @@
       <maxTime>3600000</maxTime>
     </autoCommit>
     -->
-    <!-- represents a lower bound on the frequency that commits may
-    occur (in seconds). NOTE: not yet implemented
-
-    <commitIntervalLowerBound>0</commitIntervalLowerBound>
-    -->
 
     <!-- The RunExecutableListener executes an external command.
          exe - the name of the executable to run
@@ -239,8 +234,6 @@ based HashBitset. -->
       <str name="hl.fl">text,name,subject,title,whitetok</str>
     </lst>
   </requestHandler>
-
-  <requestHandler name="/update" class="solr.UpdateRequestHandler"  />
 
   <searchComponent name="spellcheck" class="org.apache.solr.handler.component.SpellCheckComponent">
     <!-- This is slightly different from the field value so we can test dealing with token offset changes -->

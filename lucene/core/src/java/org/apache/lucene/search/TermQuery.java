@@ -32,7 +32,6 @@ import org.apache.lucene.index.TermState;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.search.similarities.Similarity.SimScorer;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.ToStringUtils;
 
 /**
@@ -40,9 +39,10 @@ import org.apache.lucene.util.ToStringUtils;
  * other terms with a {@link BooleanQuery}.
  */
 public class TermQuery extends Query {
+
   private final Term term;
   private final TermContext perReaderTermState;
-  
+
   final class TermWeight extends Weight {
     private final Similarity similarity;
     private final Similarity.SimWeight stats;
@@ -54,11 +54,26 @@ public class TermQuery extends Query {
       super(TermQuery.this);
       this.needsScores = needsScores;
       assert termStates != null : "TermContext must not be null";
+      // checked with a real exception in TermQuery constructor
+      assert termStates.hasOnlyRealTerms();
       this.termStates = termStates;
-      this.similarity = searcher.getSimilarity();
-      this.stats = similarity.computeWeight(getBoost(),
-          searcher.collectionStatistics(term.field()),
-          searcher.termStatistics(term, termStates));
+      this.similarity = searcher.getSimilarity(needsScores);
+
+      final CollectionStatistics collectionStats;
+      final TermStatistics termStats;
+      if (needsScores) {
+        collectionStats = searcher.collectionStatistics(term.field());
+        termStats = searcher.termStatistics(term, termStates);
+      } else {
+        // do not bother computing actual stats, scores are not needed
+        final int maxDoc = searcher.getIndexReader().maxDoc();
+        final int docFreq = termStates.docFreq();
+        final long totalTermFreq = termStates.totalTermFreq();
+        collectionStats = new CollectionStatistics(term.field(), maxDoc, -1, -1, -1);
+        termStats = new TermStatistics(term.bytes(), docFreq, totalTermFreq);
+      }
+     
+      this.stats = similarity.computeWeight(getBoost(), collectionStats, termStats);
     }
 
     @Override
@@ -70,29 +85,29 @@ public class TermQuery extends Query {
     public String toString() {
       return "weight(" + TermQuery.this + ")";
     }
-    
+
     @Override
     public float getValueForNormalization() {
       return stats.getValueForNormalization();
     }
-    
+
     @Override
     public void normalize(float queryNorm, float topLevelBoost) {
       stats.normalize(queryNorm, topLevelBoost);
     }
-    
+
     @Override
-    public Scorer scorer(LeafReaderContext context, Bits acceptDocs) throws IOException {
+    public Scorer scorer(LeafReaderContext context) throws IOException {
       assert termStates.topReaderContext == ReaderUtil.getTopLevelContext(context) : "The top-reader used to create Weight (" + termStates.topReaderContext + ") is not the same as the current reader's top-reader (" + ReaderUtil.getTopLevelContext(context);
       final TermsEnum termsEnum = getTermsEnum(context);
       if (termsEnum == null) {
         return null;
       }
-      PostingsEnum docs = termsEnum.postings(acceptDocs, null, needsScores ? PostingsEnum.FREQS : PostingsEnum.NONE);
+      PostingsEnum docs = termsEnum.postings(null, needsScores ? PostingsEnum.FREQS : PostingsEnum.NONE);
       assert docs != null;
       return new TermScorer(this, docs, similarity.simScorer(stats, context));
     }
-    
+
     /**
      * Returns a {@link TermsEnum} positioned at this weights Term or null if
      * the term does not exist in the given context
@@ -110,17 +125,17 @@ public class TermQuery extends Query {
       termsEnum.seekExact(term.bytes(), state);
       return termsEnum;
     }
-    
+
     private boolean termNotInReader(LeafReader reader, Term term) throws IOException {
       // only called from assert
       // System.out.println("TQ.termNotInReader reader=" + reader + " term=" +
       // field + ":" + bytes.utf8ToString());
       return reader.docFreq(term) == 0;
     }
-    
+
     @Override
     public Explanation explain(LeafReaderContext context, int doc) throws IOException {
-      Scorer scorer = scorer(context, context.reader().getLiveDocs());
+      Scorer scorer = scorer(context);
       if (scorer != null) {
         int newDoc = scorer.advance(doc);
         if (newDoc == doc) {
@@ -138,13 +153,13 @@ public class TermQuery extends Query {
       return Explanation.noMatch("no matching term");
     }
   }
-  
+
   /** Constructs a query for the term <code>t</code>. */
   public TermQuery(Term t) {
     term = Objects.requireNonNull(t);
     perReaderTermState = null;
   }
-  
+
   /**
    * Expert: constructs a TermQuery that will use the provided docFreq instead
    * of looking up the docFreq against the searcher.
@@ -152,14 +167,20 @@ public class TermQuery extends Query {
   public TermQuery(Term t, TermContext states) {
     assert states != null;
     term = Objects.requireNonNull(t);
+    if (states.hasOnlyRealTerms() == false) {
+      // The reason for this is that fake terms might have the same bytes as
+      // real terms, and this confuses query caching because they don't match
+      // the same documents
+      throw new IllegalArgumentException("Term queries must be created on real terms");
+    }
     perReaderTermState = Objects.requireNonNull(states);
   }
-  
+
   /** Returns the term of this query. */
   public Term getTerm() {
     return term;
   }
-  
+
   @Override
   public Weight createWeight(IndexSearcher searcher, boolean needsScores) throws IOException {
     final IndexReaderContext context = searcher.getTopReaderContext();
@@ -173,10 +194,10 @@ public class TermQuery extends Query {
       // PRTS was pre-build for this IS
       termState = this.perReaderTermState;
     }
-    
+
     return new TermWeight(searcher, needsScores, termState);
   }
-  
+
   /** Prints a user-readable version of this query. */
   @Override
   public String toString(String field) {
@@ -189,7 +210,7 @@ public class TermQuery extends Query {
     buffer.append(ToStringUtils.boost(getBoost()));
     return buffer.toString();
   }
-  
+
   /** Returns true iff <code>o</code> is equal to this. */
   @Override
   public boolean equals(Object o) {

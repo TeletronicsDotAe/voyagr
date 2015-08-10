@@ -18,6 +18,7 @@ package org.apache.solr.schema;
 
 import org.apache.solr.SolrTestCaseJ4.SuppressSSL;
 import org.apache.solr.client.solrj.SolrClient;
+import org.apache.solr.client.solrj.impl.CloudSolrClient;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.cloud.AbstractFullDistribZkTestBase;
 import org.apache.solr.common.SolrException;
@@ -46,19 +47,9 @@ import java.util.TreeMap;
  */
 @SuppressSSL(bugUrl = "https://issues.apache.org/jira/browse/SOLR-5776")
 public class TestCloudSchemaless extends AbstractFullDistribZkTestBase {
-  private static final Logger log = LoggerFactory.getLogger(TestCloudManagedSchemaConcurrent.class);
+  private static final Logger log = LoggerFactory.getLogger(TestCloudSchemaless.class);
   private static final String SUCCESS_XPATH = "/response/lst[@name='responseHeader']/int[@name='status'][.='0']";
 
-  @Override
-  public void distribSetUp() throws Exception {
-
-    super.distribSetUp();
-
-    useJettyDataDir = false;
-
-    System.setProperty("numShards", Integer.toString(sliceCount));
-  }
-  
   @After
   public void teardDown() throws Exception {
     super.tearDown();
@@ -75,7 +66,6 @@ public class TestCloudSchemaless extends AbstractFullDistribZkTestBase {
   @BeforeClass
   public static void initSysProperties() {
     System.setProperty("managed.schema.mutable", "true");
-    System.setProperty("enable.update.log", "true");
   }
 
   @Override
@@ -186,6 +176,15 @@ public class TestCloudSchemaless extends AbstractFullDistribZkTestBase {
         fail("Expected Bad Request Exception");
       } catch (SolrException se) {
         assertEquals(ErrorCode.BAD_REQUEST, ErrorCode.getErrorCode(se.code()));
+      }
+
+      try {
+        CloudSolrClient cloudSolrClient = getCommonCloudSolrClient();
+        cloudSolrClient.add(docs);
+        cloudSolrClient.commit();
+        fail("Expected Bad Request Exception");
+      } catch (SolrException ex) {
+        assertEquals(ErrorCode.BAD_REQUEST, ErrorCode.getErrorCode((ex).code()));
       }
     }
   }

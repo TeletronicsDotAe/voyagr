@@ -25,7 +25,6 @@
   <xi:include href="solrconfig.snippet.randomindexconfig.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
   <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.RAMDirectoryFactory}"/>
   <requestHandler name="standard" class="solr.StandardRequestHandler"/>
-  <requestHandler name="/update" class="solr.UpdateRequestHandler"/>
   <initParams name="a" path="/dump3,/dump6,/root/*,/root1/**">
     <lst name="defaults">
       <str name="a">A</str>
@@ -81,9 +80,9 @@
       <str>elevator</str>
     </arr>
   </requestHandler>
+  <requestHandler name="/dump7" class="DumpRequestHandler"/>
 
-
-
-
-
+  <initParams path="/dump7">
+    <str name="healthcheckFile">server-enabled.txt</str>
+  </initParams>
 </config>

@@ -65,13 +65,11 @@ public class StressHdfsTest extends BasicDistributedZkTest {
   @BeforeClass
   public static void setupClass() throws Exception {
     dfsCluster = HdfsTestUtil.setupClass(createTempDir().toFile().getAbsolutePath());
-    System.setProperty("solr.hdfs.home", dfsCluster.getURI().toString() + "/solr");
   }
   
   @AfterClass
   public static void teardownClass() throws Exception {
     HdfsTestUtil.teardownClass(dfsCluster);
-    System.clearProperty("solr.hdfs.home");
     dfsCluster = null;
   }
   
@@ -155,7 +153,7 @@ public class StressHdfsTest extends BasicDistributedZkTest {
 
     waitForRecoveriesToFinish(DELETE_DATA_DIR_COLLECTION, false);
     cloudClient.setDefaultCollection(DELETE_DATA_DIR_COLLECTION);
-    cloudClient.getZkStateReader().updateClusterState(true);
+    cloudClient.getZkStateReader().updateClusterState();
     
     for (int i = 1; i < nShards + 1; i++) {
       cloudClient.getZkStateReader().getLeaderRetry(DELETE_DATA_DIR_COLLECTION, "shard" + i, 30000);
@@ -212,14 +210,14 @@ public class StressHdfsTest extends BasicDistributedZkTest {
       }
       
       Thread.sleep(200);
-      cloudClient.getZkStateReader().updateClusterState(true);
+      cloudClient.getZkStateReader().updateClusterState();
     }
     
     // check that all dirs are gone
     for (String dataDir : dataDirs) {
-      Configuration conf = new Configuration();
+      Configuration conf = HdfsTestUtil.getClientConfiguration(dfsCluster);
       conf.setBoolean("fs.hdfs.impl.disable.cache", true);
-      FileSystem fs = FileSystem.get(new URI(dataDir), conf);
+      FileSystem fs = FileSystem.get(new URI(HdfsTestUtil.getURI(dfsCluster)), conf);
       assertFalse(
           "Data directory exists after collection removal : " + dataDir,
           fs.exists(new Path(dataDir)));

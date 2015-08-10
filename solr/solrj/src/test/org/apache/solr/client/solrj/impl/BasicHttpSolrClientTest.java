@@ -17,11 +17,44 @@
 
 package org.apache.solr.client.solrj.impl;
 
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpException;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
+import org.apache.http.ParseException;
+import org.apache.http.client.CookieStore;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.params.HttpClientParams;
+import org.apache.http.client.protocol.ClientContext;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.cookie.Cookie;
+import org.apache.http.cookie.CookieSpec;
+import org.apache.http.cookie.CookieSpecRegistry;
+import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.RequestWrapper;
+import org.apache.http.impl.cookie.BasicClientCookie;
+import org.apache.http.protocol.HttpContext;
 import org.apache.solr.SolrJettyTestBase;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrRequest;
@@ -41,24 +74,13 @@ import org.apache.solr.util.SSLTestConfig;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.Socket;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class BasicHttpSolrClientTest extends SolrJettyTestBase {
-  
+
+  private static Logger log = LoggerFactory.getLogger(BasicHttpSolrClientTest.class);
+
   public static class RedirectServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
@@ -73,7 +95,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
         throws ServletException, IOException {
       try {
         Thread.sleep(5000);
-      } catch (InterruptedException e) {}
+      } catch (InterruptedException ignored) {}
     }
   }
   
@@ -84,6 +106,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       parameters = null;
       errorCode = null;
       queryString = null;
+      cookies = null;
     }
     
     public static Integer errorCode = null;
@@ -91,16 +114,30 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
     public static HashMap<String,String> headers = null;
     public static Map<String,String[]> parameters = null;
     public static String queryString = null;
+    public static javax.servlet.http.Cookie[] cookies = null;
     
     public static void setErrorCode(Integer code) {
       errorCode = code;
     }
     
-
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+      lastMethod = "delete";
+      recordRequest(req, resp);
+    }
+    
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
         throws ServletException, IOException {
       lastMethod = "get";
+      recordRequest(req, resp);
+    }
+    
+    @Override
+    protected void doHead(HttpServletRequest req, HttpServletResponse resp)
+        throws ServletException, IOException {
+      lastMethod = "head";
       recordRequest(req, resp);
     }
     
@@ -122,6 +159,11 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       queryString = req.getQueryString();
     }
 
+    private void setCookies(HttpServletRequest req) {
+      javax.servlet.http.Cookie[] ck = req.getCookies();
+      cookies = req.getCookies();
+    }
+
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
         throws ServletException, IOException {
@@ -140,6 +182,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       setHeaders(req);
       setParameters(req);
       setQueryString(req);
+      setCookies(req);
       if (null != errorCode) {
         try { 
           resp.sendError(errorCode); 
@@ -167,7 +210,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
     SolrQuery q = new SolrQuery("*:*");
     try (HttpSolrClient client = new HttpSolrClient(jetty.getBaseUrl().toString() + "/slow/foo")) {
       client.setSoTimeout(2000);
-      QueryResponse response = client.query(q, METHOD.GET);
+      client.query(q, METHOD.GET);
       fail("No exception thrown.");
     } catch (SolrServerException e) {
       assertTrue(e.getMessage().contains("Timeout"));
@@ -183,7 +226,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
   public void testSolrExceptionCodeNotFromSolr() throws IOException, SolrServerException {
     final int status = 527;
     assertEquals(status + " didn't generate an UNKNOWN error code, someone modified the list of valid ErrorCode's w/o changing this test to work a different way",
-                 ErrorCode.UNKNOWN, ErrorCode.getErrorCode(status));
+        ErrorCode.UNKNOWN, ErrorCode.getErrorCode(status));
 
     try ( HttpSolrClient client = new HttpSolrClient(jetty.getBaseUrl().toString() + "/debug/foo")) {
       DebugServlet.setErrorCode(status);
@@ -192,7 +235,6 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
         client.query(q, METHOD.GET);
         fail("Didn't get excepted exception from oversided request");
       } catch (SolrException e) {
-        System.out.println(e);
         assertEquals("Unexpected exception status code", status, e.code());
       }
     } finally {
@@ -201,15 +243,14 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
   }
 
   @Test
-  public void testQuery() throws IOException {
+  public void testQuery() throws Exception {
     DebugServlet.clear();
     try (HttpSolrClient client = new HttpSolrClient(jetty.getBaseUrl().toString() + "/debug/foo")) {
       SolrQuery q = new SolrQuery("foo");
       q.setParam("a", "\u1234");
       try {
         client.query(q, METHOD.GET);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
 
       //default method
       assertEquals("get", DebugServlet.lastMethod);
@@ -235,8 +276,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.query(q, METHOD.POST);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("post", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -253,8 +294,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.query(q, METHOD.PUT);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("put", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -272,8 +313,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.query(q, METHOD.GET);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("get", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -290,8 +331,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.query(q, METHOD.POST);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("post", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -308,8 +349,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.query(q, METHOD.PUT);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("put", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -326,13 +367,12 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
   }
 
   @Test
-  public void testDelete() throws IOException {
+  public void testDelete() throws Exception {
     DebugServlet.clear();
     try (HttpSolrClient client = new HttpSolrClient(jetty.getBaseUrl().toString() + "/debug/foo")) {
       try {
         client.deleteById("id");
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
 
       //default method
       assertEquals("post", DebugServlet.lastMethod);
@@ -353,8 +393,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       client.setParser(new XMLResponseParser());
       try {
         client.deleteByQuery("*:*");
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
 
       assertEquals("post", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
@@ -367,9 +406,32 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
     }
 
   }
-  
+
   @Test
-  public void testUpdate() throws IOException {
+  public void testGetById() throws Exception {
+    DebugServlet.clear();
+    try (HttpSolrClient client = new HttpSolrClient(jetty.getBaseUrl().toString() + "/debug/foo")) {
+      Collection<String> ids = Collections.singletonList("a");
+      try {
+        client.getById("a");
+      } catch (ParseException ignored) {}
+
+      try {
+        client.getById(ids, null);
+      } catch (ParseException ignored) {}
+
+      try {
+        client.getById("foo", "a");
+      } catch (ParseException ignored) {}
+
+      try {
+        client.getById("foo", ids, null);
+      } catch (ParseException ignored) {}
+    }
+  }
+
+  @Test
+  public void testUpdate() throws Exception {
     DebugServlet.clear();
     try (HttpSolrClient client = new HttpSolrClient(jetty.getBaseUrl().toString() + "/debug/foo")) {
       UpdateRequest req = new UpdateRequest();
@@ -377,8 +439,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       req.setParam("a", "\u1234");
       try {
         client.request(req);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
 
       //default method
       assertEquals("post", DebugServlet.lastMethod);
@@ -400,8 +461,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       client.setParser(new XMLResponseParser());
       try {
         client.request(req);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("post", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -418,8 +479,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.request(req);
-      } catch (Throwable t) {
-      }
+      } catch (ParseException ignored) {}
+
       assertEquals("post", DebugServlet.lastMethod);
       assertEquals("Solr[" + HttpSolrClient.class.getName() + "] 1.0", DebugServlet.headers.get("User-Agent"));
       assertEquals(1, DebugServlet.parameters.get(CommonParams.WT).length);
@@ -439,21 +500,19 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       SolrQuery q = new SolrQuery("*:*");
       // default = false
       try {
-        QueryResponse response = client.query(q);
+        client.query(q);
         fail("Should have thrown an exception.");
       } catch (SolrServerException e) {
         assertTrue(e.getMessage().contains("redirect"));
       }
+
       client.setFollowRedirects(true);
-      try {
-        QueryResponse response = client.query(q);
-      } catch (Throwable t) {
-        fail("Exception was thrown:" + t);
-      }
+      client.query(q);
+
       //And back again:
       client.setFollowRedirects(false);
       try {
-        QueryResponse response = client.query(q);
+        client.query(q);
         fail("Should have thrown an exception.");
       } catch (SolrServerException e) {
         assertTrue(e.getMessage().contains("redirect"));
@@ -471,17 +530,17 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       DebugServlet.clear();
       try {
         client.query(q);
-      } catch (Throwable t) {}
+      } catch (ParseException ignored) {}
       assertNull(DebugServlet.headers.get("Accept-Encoding"));
       client.setAllowCompression(true);
       try {
         client.query(q);
-      } catch (Throwable t) {}
+      } catch (ParseException ignored) {}
       assertNotNull(DebugServlet.headers.get("Accept-Encoding"));
       client.setAllowCompression(false);
       try {
         client.query(q);
-      } catch (Throwable t) {}
+      } catch (ParseException ignored) {}
       assertNull(DebugServlet.headers.get("Accept-Encoding"));
     }
     
@@ -496,9 +555,8 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       entity = response.getEntity();
       Header ceheader = entity.getContentEncoding();
       assertEquals("gzip", ceheader.getValue());
-      
     } finally {
-      if(entity!=null) {
+      if (entity != null) {
         entity.getContent().close();
       }
       httpclient.close();
@@ -540,28 +598,25 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       try {
         solrClient.setMaxTotalConnections(1);
         fail("Operation should not succeed.");
-      } catch (UnsupportedOperationException e) {}
+      } catch (UnsupportedOperationException ignored) {}
       try {
         solrClient.setDefaultMaxConnectionsPerHost(1);
         fail("Operation should not succeed.");
-      } catch (UnsupportedOperationException e) {}
+      } catch (UnsupportedOperationException ignored) {}
 
     }
   }
 
   @Test
   public void testGetRawStream() throws SolrServerException, IOException{
-    CloseableHttpClient client = HttpClientUtil.createClient(null);
-    try {
+    try (CloseableHttpClient client = HttpClientUtil.createClient(null)) {
       HttpSolrClient solrClient = new HttpSolrClient(jetty.getBaseUrl().toString() + "/collection1",
-                                                 client, null);
+          client, null);
       QueryRequest req = new QueryRequest();
       NamedList response = solrClient.request(req);
-      InputStream stream = (InputStream)response.get("stream");
+      InputStream stream = (InputStream) response.get("stream");
       assertNotNull(stream);
       stream.close();
-    } finally {
-      client.close();
     }
   }
 
@@ -580,28 +635,105 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
                   SSLTestConfig.TEST_KEYSTORE);
   }
 
+  /**
+   * An interceptor changing the request
+   */
+  HttpRequestInterceptor changeRequestInterceptor = new HttpRequestInterceptor() {
 
-  private int findUnusedPort() {
-    for (int port = 0; port < 65535; port++) {
-      Socket s = new Socket();
+    @Override
+    public void process(HttpRequest request, HttpContext context) throws HttpException,
+    IOException {
+      log.info("Intercepted params: "+context);
+
+      RequestWrapper wrapper = (RequestWrapper) request;
+      URIBuilder uribuilder = new URIBuilder(wrapper.getURI());
+      uribuilder.addParameter("b", "\u4321");
       try {
-        s.bind(null);
-        int availablePort = s.getLocalPort();
-        s.close();
-        return availablePort;
-      } catch (IOException e) {
-        e.printStackTrace();
+        wrapper.setURI(uribuilder.build());
+      } catch (URISyntaxException ex) {
+        throw new HttpException("Invalid request URI", ex);
       }
     }
-    throw new RuntimeException("Could not find unused TCP port.");
+  };
+
+  public static final String cookieName = "cookieName";
+  public static final String cookieValue = "cookieValue";
+
+  /**
+   * An interceptor setting a cookie
+   */
+  HttpRequestInterceptor cookieSettingRequestInterceptor = new HttpRequestInterceptor() {    
+    @Override
+    public void process(HttpRequest request, HttpContext context) throws HttpException,
+    IOException {
+      BasicClientCookie cookie = new BasicClientCookie(cookieName, cookieValue);
+      cookie.setVersion(0);
+      cookie.setPath("/");
+      cookie.setDomain(jetty.getBaseUrl().getHost());
+
+      CookieStore cookieStore = new BasicCookieStore();        
+      CookieSpecRegistry registry = (CookieSpecRegistry) context.getAttribute(ClientContext.COOKIESPEC_REGISTRY);
+      String policy = HttpClientParams.getCookiePolicy(request.getParams());
+      CookieSpec cookieSpec = registry.getCookieSpec(policy, request.getParams());
+      // Add the cookies to the request
+      List<Header> headers = cookieSpec.formatCookies(Collections.singletonList((Cookie)cookie));
+      for (Header header : headers) {
+        request.addHeader(header);
+      }
+      context.setAttribute(ClientContext.COOKIE_STORE, cookieStore);
+      context.setAttribute(ClientContext.COOKIE_SPEC, cookieSpec);
+    }
+  };
+
+
+  /**
+   * Set cookies via interceptor
+   * Change the request via an interceptor
+   * Ensure cookies are actually set and that request is actually changed
+   */
+  @Test
+  public void testInterceptors() {
+    DebugServlet.clear();
+    HttpClientUtil.addRequestInterceptor(changeRequestInterceptor);
+    HttpClientUtil.addRequestInterceptor(cookieSettingRequestInterceptor);    
+
+    try(HttpSolrClient server = new HttpSolrClient(jetty.getBaseUrl().toString() +
+        "/debug/foo")) {
+
+      SolrQuery q = new SolrQuery("foo");
+      q.setParam("a", "\u1234");
+      try {
+        server.query(q, random().nextBoolean()?METHOD.POST:METHOD.GET);
+      } catch (Throwable t) {}
+
+      // Assert cookies from UseContextCallback 
+      assertNotNull(DebugServlet.cookies);
+      boolean foundCookie = false;
+      for (javax.servlet.http.Cookie cookie : DebugServlet.cookies) {
+        if (cookieName.equals(cookie.getName())
+            && cookieValue.equals(cookie.getValue())) {
+          foundCookie = true;
+          break;
+        }
+      }
+      assertTrue(foundCookie);
+
+      // Assert request changes by ChangeRequestCallback
+      assertEquals("\u1234", DebugServlet.parameters.get("a")[0]);
+      assertEquals("\u4321", DebugServlet.parameters.get("b")[0]);
+
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    } finally {
+      HttpClientUtil.removeRequestInterceptor(changeRequestInterceptor);
+      HttpClientUtil.removeRequestInterceptor(cookieSettingRequestInterceptor);    
+    }
   }
 
   private Set<String> setOf(String... keys) {
-    Set<String> set = new TreeSet<String>();
+    Set<String> set = new TreeSet<>();
     if (keys != null) {
-      for (String k : keys) {
-        set.add(k);
-      }
+      Collections.addAll(set, keys);
     }
     return set;
   }
@@ -645,7 +777,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       setReqParamsOf(req, "serverOnly", "notServer");
       try {
         client.request(req);
-      } catch (Throwable t) {}
+      } catch (ParseException ignored) {}
       verifyServletState(client, req);
   
       // test without server query params
@@ -656,7 +788,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       setReqParamsOf(req, "requestOnly", "notRequest");
       try {
         client.request(req);
-      } catch (Throwable t) {}
+      } catch (ParseException ignored) {}
       verifyServletState(client, req);
   
       // test with both request and server query params
@@ -667,7 +799,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       setReqParamsOf(req, "serverOnly", "requestOnly", "both", "neither");
        try {
         client.request(req);
-      } catch (Throwable t) {}
+       } catch (ParseException ignored) {}
       verifyServletState(client, req);
   
       // test with both request and server query params with single stream
@@ -679,7 +811,7 @@ public class BasicHttpSolrClientTest extends SolrJettyTestBase {
       setReqParamsOf(req, "serverOnly", "requestOnly", "both", "neither");
        try {
         client.request(req);
-      } catch (Throwable t) {}
+       } catch (ParseException ignored) {}
       // NOTE: single stream requests send all the params
       // as part of the query string.  So add "neither" to the request
       // so it passes the verification step.

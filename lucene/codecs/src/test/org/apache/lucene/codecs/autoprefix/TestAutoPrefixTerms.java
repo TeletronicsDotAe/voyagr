@@ -17,7 +17,9 @@ package org.apache.lucene.codecs.autoprefix;
  * limitations under the License.
  */
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,8 +29,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.lucene.analysis.MockAnalyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.tokenattributes.TermToBytesRefAttribute;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
@@ -46,14 +46,17 @@ import org.apache.lucene.index.MultiDocValues;
 import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.PostingsEnum;
+import org.apache.lucene.index.RandomIndexWriter;
 import org.apache.lucene.index.SerialMergeScheduler;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.search.MultiTermQuery;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.PrefixQuery;
+import org.apache.lucene.search.TermRangeQuery;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.util.AttributeImpl;
+import org.apache.lucene.util.AttributeSource;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LuceneTestCase;
@@ -162,7 +165,7 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
           System.out.println("  got term=" + te.term().utf8ToString());
         }
         verifier.sawTerm(te.term());
-        postingsEnum = te.postings(null, postingsEnum);
+        postingsEnum = te.postings(postingsEnum);
         int docID;
         while ((docID = postingsEnum.nextDoc()) != PostingsEnum.NO_MORE_DOCS) {
           long v = docValues.get(docID);
@@ -228,7 +231,7 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
 
     for(Integer term : terms) {
       Document doc = new Document();
-      doc.add(new BinaryField("field", intToBytes(term)));
+      doc.add(newStringField("field", intToBytes(term), Field.Store.NO));
       doc.add(new NumericDocValuesField("field", term));
       w.addDocument(doc);
     }
@@ -289,7 +292,7 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
           System.out.println("  got term=" + te.term() + " docFreq=" + te.docFreq());
         }
         verifier.sawTerm(te.term());        
-        postingsEnum = te.postings(null, postingsEnum);
+        postingsEnum = te.postings(postingsEnum);
         int docID;
         while ((docID = postingsEnum.nextDoc()) != PostingsEnum.NO_MORE_DOCS) {
           long v = docValues.get(docID);
@@ -408,7 +411,7 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
           System.out.println("TEST: got term=" + te.term().utf8ToString() + " docFreq=" + te.docFreq());
         }
         verifier.sawTerm(te.term());        
-        postingsEnum = te.postings(null, postingsEnum);
+        postingsEnum = te.postings(postingsEnum);
         int docID;
         while ((docID = postingsEnum.nextDoc()) != PostingsEnum.NO_MORE_DOCS) {
           assertTrue("prefixBR=" + prefixBR + " docBR=" + docValues.get(docID), StringHelper.startsWith(docValues.get(docID), prefixBR));
@@ -484,7 +487,7 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
     //TermsEnum te = terms.intersect(new CompiledAutomaton(a, true, false), null);
     while (te.next() != null) {
       verifier.sawTerm(te.term());
-      postingsEnum = te.postings(null, postingsEnum);
+      postingsEnum = te.postings(postingsEnum);
       int docID;
       while ((docID = postingsEnum.nextDoc()) != PostingsEnum.NO_MORE_DOCS) {
         // The auto-prefix terms should never "overlap" one another, so we should only ever see a given docID one time:
@@ -494,83 +497,10 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
     // 1 document has exactly "a", and 30 documents had "a?"
     verifier.finish(31, maxTermsAutoPrefix);
     PrefixQuery q = new PrefixQuery(new Term("field", "a"));
-    q.setRewriteMethod(MultiTermQuery.CONSTANT_SCORE_BOOLEAN_REWRITE);
     assertEquals(31, newSearcher(r).search(q, 1).totalHits);
     r.close();
     w.close();
     dir.close();
-  }
-
-  static final class BinaryTokenStream extends TokenStream {
-    private final ByteTermAttribute bytesAtt = addAttribute(ByteTermAttribute.class);
-    private boolean available = true;
-  
-    public BinaryTokenStream(BytesRef bytes) {
-      bytesAtt.setBytesRef(bytes);
-    }
-  
-    @Override
-    public boolean incrementToken() {
-      if (available) {
-        clearAttributes();
-        available = false;
-        return true;
-      }
-      return false;
-    }
-  
-    @Override
-    public void reset() {
-      available = true;
-    }
-  
-    public interface ByteTermAttribute extends TermToBytesRefAttribute {
-      void setBytesRef(BytesRef bytes);
-    }
-  
-    public static class ByteTermAttributeImpl extends AttributeImpl implements ByteTermAttribute,TermToBytesRefAttribute {
-      private BytesRef bytes;
-    
-      @Override
-      public void fillBytesRef() {
-        // no-op: the bytes was already filled by our owner's incrementToken
-      }
-    
-      @Override
-      public BytesRef getBytesRef() {
-        return bytes;
-      }
-
-      @Override
-      public void setBytesRef(BytesRef bytes) {
-        this.bytes = bytes;
-      }
-    
-      @Override
-      public void clear() {}
-    
-      @Override
-      public void copyTo(AttributeImpl target) {
-        ByteTermAttributeImpl other = (ByteTermAttributeImpl) target;
-        other.bytes = bytes;
-      }
-    }
-  }
-
-  /** Basically a StringField that accepts binary term. */
-  private static class BinaryField extends Field {
-
-    final static FieldType TYPE;
-    static {
-      TYPE = new FieldType(StringField.TYPE_NOT_STORED);
-      // Necessary so our custom tokenStream is used by Field.tokenStream:
-      TYPE.setTokenized(true);
-      TYPE.freeze();
-    }
-
-    public BinaryField(String name, BytesRef value) {
-      super(name, new BinaryTokenStream(value), TYPE);
-    }
   }
 
   /** Helper class to ensure auto-prefix terms 1) never overlap one another, and 2) are used when they should be. */
@@ -743,6 +673,249 @@ public class TestAutoPrefixTerms extends LuceneTestCase {
     } catch (IllegalStateException ise) {
       assertEquals("ranges can only be indexed with IndexOptions.DOCS (field: foo)", ise.getMessage());
     }
+    w.close();
+    dir.close();
+  }
+
+  /** Make sure auto prefix terms are used with TermRangeQuery */
+  public void testTermRange() throws Exception {
+
+    List<String> prefixes = new ArrayList<>();
+    for(int i=1;i<5;i++) {
+      char[] chars = new char[i];
+      Arrays.fill(chars, 'a');
+      prefixes.add(new String(chars));
+    }
+
+    Set<String> randomTerms = new HashSet<>();
+    int numTerms = atLeast(10000);
+    while (randomTerms.size() < numTerms) {
+      for(String prefix : prefixes) {
+        randomTerms.add(prefix + TestUtil.randomSimpleString(random()));
+      }
+    }
+
+    // We make term range aa<start> - aa<end>
+    char start;
+    char end;
+
+    int actualCount;
+    boolean startInclusive = random().nextBoolean();
+    boolean endInclusive = random().nextBoolean();
+    String startTerm;
+    String endTerm;
+
+    while (true) {
+      start = (char) TestUtil.nextInt(random(), 'a', 'm');
+      end = (char) TestUtil.nextInt(random(), start+1, 'z');
+
+      actualCount = 0;
+
+      startTerm = "aa" + start;
+      endTerm = "aa" + end;
+
+      for(String term : randomTerms) {
+        int cmpStart = startTerm.compareTo(term);
+        int cmpEnd = endTerm.compareTo(term);
+        if ((cmpStart < 0 || (startInclusive && cmpStart == 0)) &&
+            (cmpEnd > 0 || (endInclusive && cmpEnd == 0))) {
+          actualCount++;
+        }
+      }
+
+      if (actualCount > 2000) {
+        break;
+      }
+    }
+
+    if (VERBOSE) {
+      System.out.println("start " + startTerm + " inclusive? " + startInclusive);
+      System.out.println("end " + endTerm + " inclusive? " + endInclusive);
+      System.out.println("actual count " + actualCount);
+    }
+
+    Directory dir = newDirectory();
+    IndexWriterConfig iwc = newIndexWriterConfig(new MockAnalyzer(random()));
+    int minTermsInBlock = TestUtil.nextInt(random(), 2, 100);
+    int maxTermsInBlock = Math.max(2, (minTermsInBlock-1)*2 + random().nextInt(100));
+
+    int minTermsAutoPrefix = TestUtil.nextInt(random(), 2, 100);
+    int maxTermsAutoPrefix = random().nextBoolean() ? Math.max(2, (minTermsAutoPrefix-1)*2 + random().nextInt(100)) : Integer.MAX_VALUE;
+
+    if (VERBOSE) {
+      System.out.println("minTermsAutoPrefix " + minTermsAutoPrefix);
+      System.out.println("maxTermsAutoPrefix " + maxTermsAutoPrefix);
+    }
+
+    iwc.setCodec(TestUtil.alwaysPostingsFormat(new AutoPrefixPostingsFormat(minTermsInBlock, maxTermsInBlock,
+                                                                            minTermsAutoPrefix, maxTermsAutoPrefix)));
+    RandomIndexWriter w = new RandomIndexWriter(random(), dir, iwc);
+
+    if (VERBOSE) {
+      System.out.println("TEST: index terms");
+    }
+    for (String term : randomTerms) {
+      Document doc = new Document();
+      doc.add(new StringField("field", term, Field.Store.NO));
+      w.addDocument(doc);
+      if (VERBOSE) {
+        System.out.println("  " + term);
+      }
+    }
+
+    if (VERBOSE) {
+      System.out.println("TEST: now force merge");
+    }
+
+    w.forceMerge(1);
+    IndexReader r = w.getReader();
+    final Terms terms = MultiFields.getTerms(r, "field");
+    IndexSearcher s = new IndexSearcher(r);
+    final int finalActualCount = actualCount;
+    if (VERBOSE) {
+      System.out.println("start=" + startTerm + " end=" + endTerm + " startIncl=" + startInclusive + " endIncl=" + endInclusive);
+    }
+    TermRangeQuery q = new TermRangeQuery("field", new BytesRef(startTerm), new BytesRef(endTerm), startInclusive, endInclusive) {
+      public TermRangeQuery checkTerms() throws IOException {
+        TermsEnum termsEnum = getTermsEnum(terms, new AttributeSource());
+        int count = 0;
+        while (termsEnum.next() != null) {
+          if (VERBOSE) {
+            System.out.println("got term: " + termsEnum.term().utf8ToString());
+          }
+          count++;
+        }
+        if (VERBOSE) {
+          System.out.println("count " + count + " vs finalActualCount=" + finalActualCount);
+        }
+
+        // Auto-prefix term(s) should have kicked in, so we should have visited fewer than the total number of aa* terms:
+        assertTrue(count < finalActualCount);
+
+        return this;
+      }
+    }.checkTerms();
+
+    int maxClauseCount = BooleanQuery.getMaxClauseCount();
+
+    try {
+
+      // TODO test with boolean rewrite as well once we can create term
+      // queries on fake terms
+      /*if (random().nextBoolean()) {
+        q.setRewriteMethod(MultiTermQuery.SCORING_BOOLEAN_REWRITE);
+        BooleanQuery.setMaxClauseCount(actualCount);
+      } else if (random().nextBoolean()) {
+        q.setRewriteMethod(MultiTermQuery.CONSTANT_SCORE_BOOLEAN_REWRITE);
+        BooleanQuery.setMaxClauseCount(actualCount);
+      }*/
+
+      if (VERBOSE) {
+        System.out.println("TEST: use rewrite method " + q.getRewriteMethod());
+      }
+      assertEquals(actualCount, s.search(q, 1).totalHits);
+    } finally {
+      BooleanQuery.setMaxClauseCount(maxClauseCount);
+    }
+
+    // Test when min == max:
+    List<String> randomTermsList = new ArrayList<>(randomTerms);
+    for(int iter=0;iter<100*RANDOM_MULTIPLIER;iter++) {
+      String term = randomTermsList.get(random().nextInt(randomTermsList.size()));
+      q = new TermRangeQuery("field", new BytesRef(term), new BytesRef(term), true, true);
+      assertEquals(1, s.search(q, 1).totalHits);
+    }
+
+    r.close();
+    w.close();
+    dir.close();
+  }
+
+
+  /** Make sure auto prefix terms are used with PrefixQuery. */
+  public void testPrefixQuery() throws Exception {
+
+    List<String> prefixes = new ArrayList<>();
+    for(int i=1;i<5;i++) {
+      char[] chars = new char[i];
+      Arrays.fill(chars, 'a');
+      prefixes.add(new String(chars));
+    }
+
+    Set<String> randomTerms = new HashSet<>();
+    int numTerms = atLeast(10000);
+    while (randomTerms.size() < numTerms) {
+      for(String prefix : prefixes) {
+        randomTerms.add(prefix + TestUtil.randomRealisticUnicodeString(random()));
+      }
+    }
+
+    int actualCount = 0;
+    for(String term : randomTerms) {
+      if (term.startsWith("aa")) {
+        actualCount++;
+      }
+    }
+
+    //System.out.println("actual count " + actualCount);
+
+    Directory dir = newDirectory();
+    IndexWriterConfig iwc = newIndexWriterConfig(new MockAnalyzer(random()));
+    int minTermsInBlock = TestUtil.nextInt(random(), 2, 100);
+    int maxTermsInBlock = Math.max(2, (minTermsInBlock-1)*2 + random().nextInt(100));
+
+    // As long as this is never > actualCount, aa should always see at least one auto-prefix term:
+    int minTermsAutoPrefix = TestUtil.nextInt(random(), 2, actualCount);
+    int maxTermsAutoPrefix = random().nextBoolean() ? Math.max(2, (minTermsAutoPrefix-1)*2 + random().nextInt(100)) : Integer.MAX_VALUE;
+
+    iwc.setCodec(TestUtil.alwaysPostingsFormat(new AutoPrefixPostingsFormat(minTermsInBlock, maxTermsInBlock,
+                                                                            minTermsAutoPrefix, maxTermsAutoPrefix)));
+    RandomIndexWriter w = new RandomIndexWriter(random(), dir, iwc);
+
+    for (String term : randomTerms) {
+      Document doc = new Document();
+      doc.add(new StringField("field", term, Field.Store.NO));
+      w.addDocument(doc);
+    }
+
+    w.forceMerge(1);
+    IndexReader r = w.getReader();
+    final Terms terms = MultiFields.getTerms(r, "field");
+    IndexSearcher s = new IndexSearcher(r);
+    final int finalActualCount = actualCount;
+    PrefixQuery q = new PrefixQuery(new Term("field", "aa")) {
+      public PrefixQuery checkTerms() throws IOException {
+        TermsEnum termsEnum = getTermsEnum(terms, new AttributeSource());
+        int count = 0;
+        while (termsEnum.next() != null) {
+          //System.out.println("got term: " + termsEnum.term().utf8ToString());
+          count++;
+        }
+
+        // Auto-prefix term(s) should have kicked in, so we should have visited fewer than the total number of aa* terms:
+        assertTrue(count < finalActualCount);
+
+        return this;
+      }
+    }.checkTerms();
+
+    int x = BooleanQuery.getMaxClauseCount();
+    try {
+      // TODO test with boolean rewrite as well once we can create term
+      // queries on fake terms
+      /*BooleanQuery.setMaxClauseCount(randomTerms.size());
+      if (random().nextBoolean()) {
+        q.setRewriteMethod(MultiTermQuery.SCORING_BOOLEAN_REWRITE);
+      } else if (random().nextBoolean()) {
+        q.setRewriteMethod(MultiTermQuery.CONSTANT_SCORE_BOOLEAN_REWRITE);
+      }*/
+
+      assertEquals(actualCount, s.search(q, 1).totalHits);
+    } finally {
+      BooleanQuery.setMaxClauseCount(x);
+    }
+
+    r.close();
     w.close();
     dir.close();
   }

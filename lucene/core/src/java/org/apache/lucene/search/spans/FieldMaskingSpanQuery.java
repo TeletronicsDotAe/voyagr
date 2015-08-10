@@ -18,17 +18,11 @@ package org.apache.lucene.search.spans;
  */
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.Set;
+import java.util.Objects;
 
-import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermContext;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.util.Bits;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.util.ToStringUtils;
 
 /**
@@ -79,8 +73,8 @@ public class FieldMaskingSpanQuery extends SpanQuery {
   private String field;
     
   public FieldMaskingSpanQuery(SpanQuery maskedQuery, String maskedField) {
-    this.maskedQuery = maskedQuery;
-    this.field = maskedField;
+    this.maskedQuery = Objects.requireNonNull(maskedQuery);
+    this.field = Objects.requireNonNull(maskedField);
   }
 
   @Override
@@ -94,16 +88,6 @@ public class FieldMaskingSpanQuery extends SpanQuery {
 
   // :NOTE: getBoost and setBoost are not proxied to the maskedQuery
   // ...this is done to be more consistent with things like SpanFirstQuery
-  
-  @Override
-  public Spans getSpans(LeafReaderContext context, Bits acceptDocs, Map<Term,TermContext> termContexts) throws IOException {
-    return maskedQuery.getSpans(context, acceptDocs, termContexts);
-  }
-
-  @Override
-  public void extractTerms(Set<Term> terms) {
-    maskedQuery.extractTerms(terms);
-  }  
 
   @Override
   public SpanWeight createWeight(IndexSearcher searcher, boolean needsScores) throws IOException {
@@ -141,19 +125,19 @@ public class FieldMaskingSpanQuery extends SpanQuery {
   
   @Override
   public boolean equals(Object o) {
-    if (!(o instanceof FieldMaskingSpanQuery))
+    if (! super.equals(o)) {
       return false;
+    }
     FieldMaskingSpanQuery other = (FieldMaskingSpanQuery) o;
     return (this.getField().equals(other.getField())
-            && (this.getBoost() == other.getBoost())
             && this.getMaskedQuery().equals(other.getMaskedQuery()));
 
   }
   
   @Override
   public int hashCode() {
-    return getMaskedQuery().hashCode()
-      ^ getField().hashCode()
-      ^ Float.floatToRawIntBits(getBoost());
+    return super.hashCode()
+          ^ getMaskedQuery().hashCode()
+          ^ getField().hashCode();
   }
 }

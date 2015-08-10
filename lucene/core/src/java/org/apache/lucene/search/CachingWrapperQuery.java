@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.LeafReader;
@@ -33,7 +34,6 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.Accountables;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.RoaringDocIdSet;
 
 /**
@@ -116,15 +116,22 @@ public class CachingWrapperQuery extends Query implements Accountable {
       // our cache is not sufficient, we need scores too
       return weight;
     }
-    policy.onUse(weight.getQuery());
+
     return new ConstantScoreWeight(weight.getQuery()) {
+
+      final AtomicBoolean used = new AtomicBoolean(false);
+
       @Override
       public void extractTerms(Set<Term> terms) {
         weight.extractTerms(terms);
       }
 
       @Override
-      protected Scorer scorer(LeafReaderContext context, final Bits acceptDocs, final float score) throws IOException {
+      public Scorer scorer(LeafReaderContext context) throws IOException {
+        if (used.compareAndSet(false, true)) {
+          policy.onUse(getQuery());
+        }
+
         final LeafReader reader = context.reader();
         final Object key = reader.getCoreCacheKey();
 
@@ -133,7 +140,7 @@ public class CachingWrapperQuery extends Query implements Accountable {
           hitCount++;
         } else if (policy.shouldCache(query, context)) {
           missCount++;
-          final Scorer scorer = weight.scorer(context, null);
+          final Scorer scorer = weight.scorer(context);
           if (scorer == null) {
             docIdSet = DocIdSet.EMPTY;
           } else {
@@ -141,73 +148,19 @@ public class CachingWrapperQuery extends Query implements Accountable {
           }
           cache.put(key, docIdSet);
         } else {
-          return weight.scorer(context, acceptDocs);
+          return weight.scorer(context);
         }
 
         assert docIdSet != null;
         if (docIdSet == DocIdSet.EMPTY) {
           return null;
         }
-        final DocIdSetIterator approximation = docIdSet.iterator();
-        if (approximation == null) {
+        final DocIdSetIterator disi = docIdSet.iterator();
+        if (disi == null) {
           return null;
         }
 
-        final DocIdSetIterator disi;
-        final TwoPhaseIterator twoPhaseView;
-        if (acceptDocs == null) {
-          twoPhaseView = null;
-          disi = approximation;
-        } else {
-          twoPhaseView = new TwoPhaseIterator(approximation) {
-            
-            @Override
-            public boolean matches() throws IOException {
-              final int doc = approximation.docID();
-              return acceptDocs.get(doc);
-            }
-
-          };
-          disi = TwoPhaseIterator.asDocIdSetIterator(twoPhaseView);
-        }
-        return new Scorer(weight) {
-
-          @Override
-          public TwoPhaseIterator asTwoPhaseIterator() {
-            return twoPhaseView;
-          }
-
-          @Override
-          public float score() throws IOException {
-            return 0f;
-          }
-
-          @Override
-          public int freq() throws IOException {
-            return 1;
-          }
-
-          @Override
-          public int docID() {
-            return disi.docID();
-          }
-
-          @Override
-          public int nextDoc() throws IOException {
-            return disi.nextDoc();
-          }
-
-          @Override
-          public int advance(int target) throws IOException {
-            return disi.advance(target);
-          }
-
-          @Override
-          public long cost() {
-            return disi.cost();
-          }
-          
-        };
+        return new ConstantScoreScorer(this, 0f, disi);
       }
     };
   }

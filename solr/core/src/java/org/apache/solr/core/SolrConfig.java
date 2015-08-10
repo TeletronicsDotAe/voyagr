@@ -51,7 +51,6 @@ import org.apache.lucene.util.Version;
 import org.apache.solr.cloud.ZkSolrResourceLoader;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
-import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.util.IOUtils;
 import org.apache.solr.handler.component.SearchComponent;
 import org.apache.solr.request.SolrRequestHandler;
@@ -82,6 +81,7 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
+import static org.apache.solr.common.util.Utils.makeMap;
 import static org.apache.solr.common.params.CommonParams.NAME;
 import static org.apache.solr.common.params.CommonParams.PATH;
 import static org.apache.solr.core.ConfigOverlay.ZNODEVER;
@@ -268,7 +268,6 @@ public class SolrConfig extends Config implements MapSerializable {
       conf = new CacheConfig(FastLRUCache.class, args, null);
     }
     fieldValueCacheConfig = conf;
-    unlockOnStartup = getBool(indexConfigPrefix + "/unlockOnStartup", false);
     useColdSearcher = getBool("query/useColdSearcher", false);
     dataDir = get("dataDir", null);
     if (dataDir != null && dataDir.length() == 0) dataDir = null;
@@ -431,7 +430,6 @@ public class SolrConfig extends Config implements MapSerializable {
         getInt("updateHandler/autoCommit/maxTime", -1),
         getBool("updateHandler/indexWriter/closeWaitsForMerges", true),
         getBool("updateHandler/autoCommit/openSearcher", true),
-        getInt("updateHandler/commitIntervalLowerBound", -1),
         getInt("updateHandler/autoSoftCommit/maxDocs", -1),
         getInt("updateHandler/autoSoftCommit/maxTime", -1),
         getBool("updateHandler/commitWithin/softCommit", true));
@@ -499,7 +497,6 @@ public class SolrConfig extends Config implements MapSerializable {
   private Map<String, List<PluginInfo>> pluginStore = new LinkedHashMap<>();
 
   public final int maxWarmingSearchers;
-  public final boolean unlockOnStartup;
   public final boolean useColdSearcher;
   public final Version luceneMatchVersion;
   protected String dataDir;
@@ -564,7 +561,7 @@ public class SolrConfig extends Config implements MapSerializable {
 
     @Override
     public Map<String, Object> toMap() {
-      return ZkNodeProps.makeMap("never304", never304,
+      return makeMap("never304", never304,
           "etagSeed", etagSeed,
           "lastModFrom", lastModFrom.name().toLowerCase(Locale.ROOT),
           "cacheControl", cacheControlHeader);
@@ -651,7 +648,7 @@ public class SolrConfig extends Config implements MapSerializable {
 
   public static class UpdateHandlerInfo implements MapSerializable {
     public final String className;
-    public final int autoCommmitMaxDocs, autoCommmitMaxTime, commitIntervalLowerBound,
+    public final int autoCommmitMaxDocs, autoCommmitMaxTime,
         autoSoftCommmitMaxDocs, autoSoftCommmitMaxTime;
     public final boolean indexWriterCloseWaitsForMerges;
     public final boolean openSearcher;  // is opening a new searcher part of hard autocommit?
@@ -660,16 +657,14 @@ public class SolrConfig extends Config implements MapSerializable {
     /**
      * @param autoCommmitMaxDocs       set -1 as default
      * @param autoCommmitMaxTime       set -1 as default
-     * @param commitIntervalLowerBound set -1 as default
      */
-    public UpdateHandlerInfo(String className, int autoCommmitMaxDocs, int autoCommmitMaxTime, boolean indexWriterCloseWaitsForMerges, boolean openSearcher, int commitIntervalLowerBound,
+    public UpdateHandlerInfo(String className, int autoCommmitMaxDocs, int autoCommmitMaxTime, boolean indexWriterCloseWaitsForMerges, boolean openSearcher,
                              int autoSoftCommmitMaxDocs, int autoSoftCommmitMaxTime, boolean commitWithinSoftCommit) {
       this.className = className;
       this.autoCommmitMaxDocs = autoCommmitMaxDocs;
       this.autoCommmitMaxTime = autoCommmitMaxTime;
       this.indexWriterCloseWaitsForMerges = indexWriterCloseWaitsForMerges;
       this.openSearcher = openSearcher;
-      this.commitIntervalLowerBound = commitIntervalLowerBound;
 
       this.autoSoftCommmitMaxDocs = autoSoftCommmitMaxDocs;
       this.autoSoftCommmitMaxTime = autoSoftCommmitMaxTime;
@@ -681,19 +676,15 @@ public class SolrConfig extends Config implements MapSerializable {
     @Override
     public Map<String, Object> toMap() {
       LinkedHashMap result = new LinkedHashMap();
-      result.put("class", className);
-      result.put("autoCommmitMaxDocs", autoCommmitMaxDocs);
-      result.put("indexWriterCloseWaitsForMerges", indexWriterCloseWaitsForMerges);
-      result.put("openSearcher", openSearcher);
-      result.put("commitIntervalLowerBound", commitIntervalLowerBound);
-      result.put("commitWithinSoftCommit", commitWithinSoftCommit);
-      result.put("autoCommit", ZkNodeProps.makeMap(
+      result.put("indexWriter", makeMap("closeWaitsForMerges", indexWriterCloseWaitsForMerges));
+      result.put("commitWithin", makeMap("softCommit", commitWithinSoftCommit));
+      result.put("autoCommit", makeMap(
           "maxDocs", autoCommmitMaxDocs,
           "maxTime", autoCommmitMaxTime,
-          "commitIntervalLowerBound", commitIntervalLowerBound
+          "openSearcher", openSearcher
       ));
       result.put("autoSoftCommit",
-          ZkNodeProps.makeMap("maxDocs", autoSoftCommmitMaxDocs,
+          makeMap("maxDocs", autoSoftCommmitMaxDocs,
               "maxTime", autoSoftCommmitMaxTime));
       return result;
     }
@@ -886,7 +877,7 @@ public class SolrConfig extends Config implements MapSerializable {
     result.put("requestDispatcher", m);
     m.put("handleSelect", handleSelect);
     if (httpCachingConfig != null) m.put("httpCaching", httpCachingConfig.toMap());
-    m.put("requestParsers", ZkNodeProps.makeMap("multipartUploadLimitKB", multipartUploadLimitKB,
+    m.put("requestParsers", makeMap("multipartUploadLimitKB", multipartUploadLimitKB,
         "formUploadLimitKB", formUploadLimitKB,
         "addHttpRequestToContext", addHttpRequestToContext));
     if (indexConfig != null) result.put("indexConfig", indexConfig.toMap());

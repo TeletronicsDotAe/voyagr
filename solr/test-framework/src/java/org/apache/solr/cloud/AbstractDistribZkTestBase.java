@@ -143,7 +143,7 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
     while (cont) {
       if (verbose) System.out.println("-");
       boolean sawLiveRecovering = false;
-      zkStateReader.updateClusterState(true);
+      zkStateReader.updateClusterState();
       ClusterState clusterState = zkStateReader.getClusterState();
       Map<String,Slice> slices = clusterState.getSlicesMap(collection);
       assertNotNull("Could not find collection:" + collection, slices);
@@ -184,10 +184,41 @@ public abstract class AbstractDistribZkTestBase extends BaseDistributedSearchTes
     log.info("Recoveries finished - collection: " + collection);
   }
 
+  public static void waitForCollectionToDisappear(String collection,
+      ZkStateReader zkStateReader, boolean verbose, boolean failOnTimeout, int timeoutSeconds)
+      throws Exception {
+    log.info("Wait for collection to disappear - collection: " + collection + " failOnTimeout:" + failOnTimeout + " timeout (sec):" + timeoutSeconds);
+    boolean cont = true;
+    int cnt = 0;
+    
+    while (cont) {
+      if (verbose) System.out.println("-");
+      zkStateReader.updateClusterState();
+      ClusterState clusterState = zkStateReader.getClusterState();
+      if (!clusterState.hasCollection(collection)) break;
+      if (cnt == timeoutSeconds) {
+        if (verbose) System.out.println("Gave up waiting for "+collection+" to disappear..");
+        if (failOnTimeout) {
+          Diagnostics.logThreadDumps("Gave up waiting for "+collection+" to disappear.  THREAD DUMP:");
+          zkStateReader.getZkClient().printLayoutToStdOut();
+          fail("The collection ("+collection+") is still present - waited for " + timeoutSeconds + " seconds");
+          // won't get here
+          return;
+        }
+        cont = false;
+      } else {
+        Thread.sleep(1000);
+      }
+      cnt++;
+    }
+
+    log.info("Collection has disappeared - collection: " + collection);
+  }
+  
   protected void assertAllActive(String collection,ZkStateReader zkStateReader)
       throws KeeperException, InterruptedException {
 
-      zkStateReader.updateClusterState(true);
+      zkStateReader.updateClusterState();
       ClusterState clusterState = zkStateReader.getClusterState();
       Map<String,Slice> slices = clusterState.getSlicesMap(collection);
       if (slices == null) {

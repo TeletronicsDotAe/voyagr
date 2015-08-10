@@ -21,12 +21,13 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 
-import org.apache.lucene.search.BooleanWeight;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.PriorityQueue;
 
 /**
- * BulkSorer that is used for pure disjunctions: no MUST clauses and
- * minShouldMatch == 1. This scorer scores documents by batches of 2048 docs.
+ * {@link BulkScorer} that is used for pure disjunctions and disjunctions
+ * that have low values of {@link BooleanQuery.Builder#setMinimumNumberShouldMatch(int)}
+ * and dense clauses. This scorer scores documents by batches of 2048 docs.
  */
 final class BooleanScorer extends BulkScorer {
 
@@ -35,6 +36,35 @@ final class BooleanScorer extends BulkScorer {
   static final int MASK = SIZE - 1;
   static final int SET_SIZE = 1 << (SHIFT - 6);
   static final int SET_MASK = SET_SIZE - 1;
+
+  private static BulkScorer disableScoring(final BulkScorer scorer) {
+    return new BulkScorer() {
+
+      @Override
+      public int score(final LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
+        final LeafCollector noScoreCollector = new LeafCollector() {
+          FakeScorer fake = new FakeScorer();
+
+          @Override
+          public void setScorer(Scorer scorer) throws IOException {
+            collector.setScorer(fake);
+          }
+
+          @Override
+          public void collect(int doc) throws IOException {
+            fake.doc = doc;
+            collector.collect(doc);
+          }
+        };
+        return scorer.score(noScoreCollector, acceptDocs, min, max);
+      }
+
+      @Override
+      public long cost() {
+        return scorer.cost();
+      }
+    };
+  }
 
   static class Bucket {
     double score;
@@ -53,11 +83,11 @@ final class BooleanScorer extends BulkScorer {
     }
 
     void advance(int min) throws IOException {
-      score(min, min);
+      score(null, min, min);
     }
 
-    void score(int min, int max) throws IOException {
-      next = scorer.score(orCollector, min, max);
+    void score(Bits acceptDocs, int min, int max) throws IOException {
+      next = scorer.score(orCollector, acceptDocs, min, max);
     }
   }
 
@@ -145,7 +175,7 @@ final class BooleanScorer extends BulkScorer {
 
   final OrCollector orCollector = new OrCollector();
 
-  BooleanScorer(BooleanWeight weight, boolean disableCoord, int maxCoord, Collection<BulkScorer> scorers, int minShouldMatch) {
+  BooleanScorer(BooleanWeight weight, boolean disableCoord, int maxCoord, Collection<BulkScorer> scorers, int minShouldMatch, boolean needsScores) {
     if (minShouldMatch < 1 || minShouldMatch > scorers.size()) {
       throw new IllegalArgumentException("minShouldMatch should be within 1..num_scorers. Got " + minShouldMatch);
     }
@@ -157,6 +187,11 @@ final class BooleanScorer extends BulkScorer {
     this.tail = new TailPriorityQueue(minShouldMatch - 1);
     this.minShouldMatch = minShouldMatch;
     for (BulkScorer scorer : scorers) {
+      if (needsScores == false) {
+        // OrCollector calls score() all the time so we have to explicitly
+        // disable scoring in order to avoid decoding useless norms
+        scorer = disableScoring(scorer);
+      }
       final BulkScorerAndDoc evicted = tail.insertWithOverflow(new BulkScorerAndDoc(scorer));
       if (evicted != null) {
         head.add(evicted);
@@ -202,12 +237,12 @@ final class BooleanScorer extends BulkScorer {
     }
   }
 
-  private void scoreWindow(LeafCollector collector, int base, int min, int max,
+  private void scoreWindow(LeafCollector collector, Bits acceptDocs, int base, int min, int max,
       BulkScorerAndDoc[] scorers, int numScorers) throws IOException {
     for (int i = 0; i < numScorers; ++i) {
       final BulkScorerAndDoc scorer = scorers[i];
       assert scorer.next < max;
-      scorer.score(min, max);
+      scorer.score(acceptDocs, min, max);
     }
 
     scoreMatches(collector, base);
@@ -235,7 +270,7 @@ final class BooleanScorer extends BulkScorer {
     return headTop;
   }
 
-  private void scoreWindow(LeafCollector collector, int windowBase, int windowMin, int windowMax) throws IOException {
+  private void scoreWindow(LeafCollector collector, Bits acceptDocs, int windowBase, int windowMin, int windowMax) throws IOException {
     // Fill 'leads' with all scorers from 'head' that are in the right window
     leads[0] = head.pop();
     int maxFreq = 1;
@@ -261,7 +296,7 @@ final class BooleanScorer extends BulkScorer {
       }
       tail.clear();
 
-      scoreWindow(collector, windowBase, windowMin, windowMax, leads, maxFreq);
+      scoreWindow(collector, acceptDocs, windowBase, windowMin, windowMax, leads, maxFreq);
     }
 
     // Push back scorers into head and tail
@@ -274,7 +309,7 @@ final class BooleanScorer extends BulkScorer {
   }
 
   @Override
-  public int score(LeafCollector collector, int min, int max) throws IOException {
+  public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
     fakeScorer.doc = -1;
     collector.setScorer(fakeScorer);
 
@@ -286,7 +321,7 @@ final class BooleanScorer extends BulkScorer {
       final int windowMax = Math.min(max, windowBase + SIZE);
 
       // general case
-      scoreWindow(collector, windowBase, windowMin, windowMax);
+      scoreWindow(collector, acceptDocs, windowBase, windowMin, windowMax);
       top = head.top();
     }
 

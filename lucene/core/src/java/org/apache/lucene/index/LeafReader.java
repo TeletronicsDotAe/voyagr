@@ -79,7 +79,9 @@ public abstract class LeafReader extends IndexReader {
    */
   public static interface CoreClosedListener {
     /** Invoked when the shared core of the original {@code
-     *  SegmentReader} has closed. */
+     *  SegmentReader} has closed. The provided {@code
+     *  ownerCoreCacheKey} will be the same key as the one
+     *  returned by {@link LeafReader#getCoreCacheKey()}. */
     public void onClose(Object ownerCoreCacheKey) throws IOException;
   }
 
@@ -208,7 +210,8 @@ public abstract class LeafReader extends IndexReader {
   /** Returns {@link PostingsEnum} for the specified term.
    *  This will return null if either the field or
    *  term does not exist.
-   *  @see TermsEnum#postings(Bits, PostingsEnum) */
+   *  <p><b>NOTE:</b> The returned {@link PostingsEnum} may contain deleted docs.
+   *  @see TermsEnum#postings(PostingsEnum) */
   public final PostingsEnum postings(Term term, int flags) throws IOException {
     assert term.field() != null;
     assert term.bytes() != null;
@@ -216,7 +219,7 @@ public abstract class LeafReader extends IndexReader {
     if (terms != null) {
       final TermsEnum termsEnum = terms.iterator();
       if (termsEnum.seekExact(term.bytes())) {
-        return termsEnum.postings(getLiveDocs(), null, flags);
+        return termsEnum.postings(null, flags);
       }
     }
     return null;
@@ -229,6 +232,7 @@ public abstract class LeafReader extends IndexReader {
    *  and do not need any proximity data.
    *  This method is equivalent to 
    *  {@link #postings(Term, int) postings(term, PostingsEnum.FREQS)}
+   *  <p><b>NOTE:</b> The returned {@link PostingsEnum} may contain deleted docs.
    *  @see #postings(Term, int)
    */
   public final PostingsEnum postings(Term term) throws IOException {

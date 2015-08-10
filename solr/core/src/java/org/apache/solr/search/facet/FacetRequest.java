@@ -19,21 +19,30 @@ package org.apache.solr.search.facet;
 
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.FacetParams;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
+import org.apache.solr.search.BitDocSet;
 import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocSet;
 import org.apache.solr.search.FunctionQParser;
@@ -47,8 +56,17 @@ import org.apache.solr.search.SyntaxError;
 public abstract class FacetRequest {
   protected Map<String,AggValueSource> facetStats;  // per-bucket statistics
   protected Map<String,FacetRequest> subFacets;     // list of facets
-  protected List<String> excludeFilters;
+  protected List<String> filters;
   protected boolean processEmpty;
+  protected Domain domain;
+
+  // domain changes
+  public static class Domain {
+    public List<String> excludeTags;
+    public boolean toParent;
+    public boolean toChildren;
+    public String parents;
+  }
 
   public FacetRequest() {
     facetStats = new LinkedHashMap<>();
@@ -84,6 +102,7 @@ class FacetContext {
   QueryContext qcontext;
   SolrQueryRequest req;  // TODO: replace with params?
   SolrIndexSearcher searcher;
+  Query filter;  // TODO: keep track of as a DocSet or as a Query?
   DocSet base;
   FacetContext parent;
   int flags;
@@ -92,216 +111,25 @@ class FacetContext {
     return (flags & IS_SHARD) != 0;
   }
 
-  public FacetContext sub() {
+  /**
+   * @param filter The filter for the bucket that resulted in this context/domain.  Can be null if this is the root context.
+   * @param domain The resulting set of documents for this facet.
+   */
+  public FacetContext sub(Query filter, DocSet domain) {
     FacetContext ctx = new FacetContext();
+    ctx.parent = this;
+    ctx.base = domain;
+    ctx.filter = filter;
+
+    // carry over from parent
     ctx.flags = flags;
     ctx.qcontext = qcontext;
     ctx.req = req;
     ctx.searcher = searcher;
-    ctx.base = base;
 
-    ctx.parent = this;
     return ctx;
   }
 }
-
-
-class FacetProcessor<FacetRequestT extends FacetRequest>  {
-  protected SimpleOrderedMap<Object> response;
-  protected FacetContext fcontext;
-  protected FacetRequestT freq;
-
-  LinkedHashMap<String,SlotAcc> accMap;
-  protected SlotAcc[] accs;
-  protected CountSlotAcc countAcc;
-
-  FacetProcessor(FacetContext fcontext, FacetRequestT freq) {
-    this.fcontext = fcontext;
-    this.freq = freq;
-  }
-
-  public void process() throws IOException {
-
-
-  }
-
-  public Object getResponse() {
-    return null;
-  }
-
-
-  protected void createAccs(int docCount, int slotCount) throws IOException {
-    accMap = new LinkedHashMap<String,SlotAcc>();
-    countAcc = new CountSlotAcc(fcontext, slotCount);
-    countAcc.key = "count";
-    for (Map.Entry<String,AggValueSource> entry : freq.getFacetStats().entrySet()) {
-      SlotAcc acc = entry.getValue().createSlotAcc(fcontext, docCount, slotCount);
-      acc.key = entry.getKey();
-      accMap.put(acc.key, acc);
-    }
-  }
-
-  /** Create the actual accs array from accMap before starting to collect stats. */
-  protected void prepareForCollection() {
-    accs = new SlotAcc[accMap.size()];
-    int i=0;
-    for (SlotAcc acc : accMap.values()) {
-      accs[i++] = acc;
-    }
-  }
-
-  protected void resetStats() {
-    countAcc.reset();
-    for (SlotAcc acc : accs) {
-      acc.reset();
-    }
-  }
-
-  protected void processStats(SimpleOrderedMap<Object> bucket, DocSet docs, int docCount) throws IOException {
-    if (docCount == 0 && !freq.processEmpty || freq.getFacetStats().size() == 0) {
-      bucket.add("count", docCount);
-      return;
-    }
-    createAccs(docCount, 1);
-    prepareForCollection();
-    int collected = collect(docs, 0);
-    countAcc.incrementCount(0, collected);
-    assert collected == docCount;
-    addStats(bucket, 0);
-  }
-
-
-  protected void fillBucketSubs(SimpleOrderedMap<Object> response, FacetContext subContext) throws IOException {
-    for (Map.Entry<String,FacetRequest> sub : freq.getSubFacets().entrySet()) {
-      FacetProcessor subProcessor = sub.getValue().createFacetProcessor(subContext);
-      subProcessor.process();
-      response.add( sub.getKey(), subProcessor.getResponse() );
-    }
-  }
-
-  int collect(DocSet docs, int slot) throws IOException {
-    int count = 0;
-    SolrIndexSearcher searcher = fcontext.searcher;
-
-    final List<LeafReaderContext> leaves = searcher.getIndexReader().leaves();
-    final Iterator<LeafReaderContext> ctxIt = leaves.iterator();
-    LeafReaderContext ctx = null;
-    int segBase = 0;
-    int segMax;
-    int adjustedMax = 0;
-    for (DocIterator docsIt = docs.iterator(); docsIt.hasNext(); ) {
-      final int doc = docsIt.nextDoc();
-      if (doc >= adjustedMax) {
-        do {
-          ctx = ctxIt.next();
-          if (ctx == null) {
-            // should be impossible
-            throw new RuntimeException("INTERNAL FACET ERROR");
-          }
-          segBase = ctx.docBase;
-          segMax = ctx.reader().maxDoc();
-          adjustedMax = segBase + segMax;
-        } while (doc >= adjustedMax);
-        assert doc >= ctx.docBase;
-        setNextReader(ctx);
-      }
-      count++;
-      collect(doc - segBase, slot);  // per-seg collectors
-    }
-    return count;
-  }
-
-  void collect(int segDoc, int slot) throws IOException {
-    for (SlotAcc acc : accs) {
-      acc.collect(segDoc, slot);
-    }
-  }
-
-  void setNextReader(LeafReaderContext ctx) throws IOException {
-    // countAcc.setNextReader is a no-op
-    for (SlotAcc acc : accs) {
-      acc.setNextReader(ctx);
-    }
-  }
-
-  void addStats(SimpleOrderedMap<Object> target, int slotNum) throws IOException {
-    int count = countAcc.getCount(slotNum);
-    target.add("count", count);
-    if (count > 0 || freq.processEmpty) {
-      for (SlotAcc acc : accs) {
-        acc.setValues(target, slotNum);
-      }
-    }
-  }
-
-
-
-
-
-  public void fillBucket(SimpleOrderedMap<Object> bucket, Query q) throws IOException {
-    boolean needDocSet = freq.getFacetStats().size() > 0 || freq.getSubFacets().size() > 0;
-
-    // TODO: always collect counts or not???
-
-    DocSet result = null;
-    int count;
-
-    if (needDocSet) {
-      if (q == null) {
-        result = fcontext.base;
-        // result.incref(); // OFF-HEAP
-      } else {
-        result = fcontext.searcher.getDocSet(q, fcontext.base);
-      }
-      count = result.size();
-    } else {
-      if (q == null) {
-        count = fcontext.base.size();
-      } else {
-        count = fcontext.searcher.numDocs(q, fcontext.base);
-      }
-    }
-
-    try {
-      processStats(bucket, result, (int) count);
-      processSubs(bucket, result);
-    } finally {
-      if (result != null) {
-        // result.decref(); // OFF-HEAP
-        result = null;
-      }
-    }
-  }
-
-
-
-
-  protected void processSubs(SimpleOrderedMap<Object> bucket, DocSet result) throws IOException {
-    // TODO: process exclusions, etc
-
-    if (result == null || result.size() == 0 && !freq.processEmpty) {
-      return;
-    }
-
-    FacetContext subContext = fcontext.sub();
-    subContext.base = result;
-
-    fillBucketSubs(bucket, subContext);
-  }
-
-
-  public static DocSet getFieldMissing(SolrIndexSearcher searcher, DocSet docs, String fieldName) throws IOException {
-    SchemaField sf = searcher.getSchema().getField(fieldName);
-    DocSet hasVal = searcher.getDocSet(sf.getType().getRangeQuery(null, sf, null, null, false, false));
-    DocSet answer = docs.andNot(hasVal);
-    // hasVal.decref(); // OFF-HEAP
-    return answer;
-  }
-
-}
-
-
-
 
 
 abstract class FacetParser<FacetRequestT extends FacetRequest> {
@@ -409,7 +237,7 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
     } else if ("query".equals(type)) {
       return parseQueryFacet(key, args);
     } else if ("range".equals(type)) {
-     return parseRangeFacet(key, args);
+      return parseRangeFacet(key, args);
     }
 
     return parseStat(key, type, args);
@@ -447,6 +275,45 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
 
   public AggValueSource parseStat(String key, String type, Object args) throws SyntaxError {
     return null;
+  }
+
+
+  private FacetRequest.Domain getDomain() {
+    if (facet.domain == null) {
+      facet.domain = new FacetRequest.Domain();
+    }
+    return facet.domain;
+  }
+
+  protected void parseCommonParams(Object o) {
+    if (o instanceof Map) {
+      Map<String,Object> m = (Map<String,Object>)o;
+      List<String> excludeTags = getStringList(m, "excludeTags");
+      if (excludeTags != null) {
+        getDomain().excludeTags = excludeTags;
+      }
+
+      Map<String,Object> domainMap = (Map<String,Object>) m.get("domain");
+      if (domainMap != null) {
+        excludeTags = getStringList(m, "excludeTags");
+        if (excludeTags != null) {
+          getDomain().excludeTags = excludeTags;
+        }
+
+        String blockParent = (String)domainMap.get("blockParent");
+        String blockChildren = (String)domainMap.get("blockChildren");
+
+        if (blockParent != null) {
+          getDomain().toParent = true;
+          getDomain().parents = blockParent;
+        } else if (blockChildren != null) {
+          getDomain().toChildren = true;
+          getDomain().parents = blockChildren;
+        }
+
+      }
+
+    }
   }
 
 
@@ -520,6 +387,20 @@ abstract class FacetParser<FacetRequestT extends FacetRequest> {
     return (String)o;
   }
 
+  public List<String> getStringList(Map<String,Object> args, String paramName) {
+    Object o = args.get(paramName);
+    if (o == null) {
+      return null;
+    }
+    if (o instanceof List) {
+      return (List<String>)o;
+    }
+    if (o instanceof String) {
+      return StrUtils.splitSmart((String)o, ",", true);
+    }
+
+    throw err("Expected list of string or comma separated string values.");
+  }
 
   public IndexSchema getSchema() {
     return parent.getSchema();
@@ -566,6 +447,8 @@ class FacetQueryParser extends FacetParser<FacetQuery> {
 
   @Override
   public FacetQuery parse(Object arg) throws SyntaxError {
+    parseCommonParams(arg);
+
     String qstring = null;
     if (arg instanceof String) {
       // just the field name...
@@ -594,6 +477,34 @@ class FacetQueryParser extends FacetParser<FacetQuery> {
   }
 }
 
+/*** not a separate type of parser for now...
+class FacetBlockParentParser extends FacetParser<FacetBlockParent> {
+  public FacetBlockParentParser(FacetParser parent, String key) {
+    super(parent, key);
+    facet = new FacetBlockParent();
+  }
+
+  @Override
+  public FacetBlockParent parse(Object arg) throws SyntaxError {
+    parseCommonParams(arg);
+
+    if (arg instanceof String) {
+      // just the field name...
+      facet.parents = (String)arg;
+
+    } else if (arg instanceof Map) {
+      Map<String, Object> m = (Map<String, Object>) arg;
+      facet.parents = getString(m, "parents", null);
+
+      parseSubs( m.get("facet") );
+    }
+
+    return facet;
+  }
+}
+***/
+
+
 class FacetFieldParser extends FacetParser<FacetField> {
   public FacetFieldParser(FacetParser parent, String key) {
     super(parent, key);
@@ -601,7 +512,7 @@ class FacetFieldParser extends FacetParser<FacetField> {
   }
 
   public FacetField parse(Object arg) throws SyntaxError {
-
+    parseCommonParams(arg);
     if (arg instanceof String) {
       // just the field name...
       facet.field = (String)arg;
@@ -674,6 +585,8 @@ class FacetRangeParser extends FacetParser<FacetRange> {
   }
 
   public FacetRange parse(Object arg) throws SyntaxError {
+    parseCommonParams(arg);
+
     if (!(arg instanceof Map)) {
       throw err("Missing range facet arguments");
     }
@@ -686,6 +599,7 @@ class FacetRangeParser extends FacetParser<FacetRange> {
     facet.end = m.get("end");
     facet.gap = m.get("gap");
     facet.hardend = getBoolean(m, "hardend", facet.hardend);
+    facet.mincount = getLong(m, "mincount", 0);
 
     // TODO: refactor list-of-options code
 

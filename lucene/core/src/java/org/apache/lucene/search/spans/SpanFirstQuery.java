@@ -36,7 +36,6 @@ public class SpanFirstQuery extends SpanPositionRangeQuery {
     super(match, 0, end);
   }
 
-  @Override
   protected AcceptStatus acceptPosition(Spans spans) throws IOException {
     assert spans.startPosition() != spans.endPosition() : "start equals end: " + spans.startPosition();
     if (spans.startPosition() >= end)
@@ -46,7 +45,6 @@ public class SpanFirstQuery extends SpanPositionRangeQuery {
     else
       return AcceptStatus.NO;
   }
-
 
   @Override
   public String toString(String field) {
@@ -66,25 +64,5 @@ public class SpanFirstQuery extends SpanPositionRangeQuery {
     spanFirstQuery.setBoost(getBoost());
     return spanFirstQuery;
   }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (!(o instanceof SpanFirstQuery)) return false;
-
-    SpanFirstQuery other = (SpanFirstQuery)o;
-    return this.end == other.end
-         && this.match.equals(other.match)
-         && this.getBoost() == other.getBoost();
-  }
-
-  @Override
-  public int hashCode() {
-    int h = match.hashCode();
-    h ^= (h << 8) | (h >>> 25);  // reversible
-    h ^= Float.floatToRawIntBits(getBoost()) ^ end;
-    return h;
-  }
-
 
 }

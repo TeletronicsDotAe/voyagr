@@ -47,6 +47,15 @@ public class AssertingLeafReader extends FilterLeafReader {
     assert in.numDocs() <= in.maxDoc();
     assert in.numDeletedDocs() + in.numDocs() == in.maxDoc();
     assert !in.hasDeletions() || in.numDeletedDocs() > 0 && in.numDocs() < in.maxDoc();
+
+    addCoreClosedListener(new CoreClosedListener() {
+      @Override
+      public void onClose(Object ownerCoreCacheKey) throws IOException {
+        final Object expectedKey = getCoreCacheKey();
+        assert expectedKey == ownerCoreCacheKey
+            : "Core closed listener called on a different key " + expectedKey + " <> " + ownerCoreCacheKey;
+      }
+    });
   }
 
   @Override
@@ -134,7 +143,7 @@ public class AssertingLeafReader extends FilterLeafReader {
     }
 
     @Override
-    public PostingsEnum postings(Bits liveDocs, PostingsEnum reuse, int flags) throws IOException {
+    public PostingsEnum postings(PostingsEnum reuse, int flags) throws IOException {
       assertThread("Terms enums", creationThread);
       assert state == State.POSITIONED: "docs(...) called on unpositioned TermsEnum";
 
@@ -145,7 +154,7 @@ public class AssertingLeafReader extends FilterLeafReader {
       } else {
         actualReuse = null;
       }
-      PostingsEnum docs = super.postings(liveDocs, actualReuse, flags);
+      PostingsEnum docs = super.postings(actualReuse, flags);
       if (docs == null) {
         assert PostingsEnum.featureRequested(flags, DocsAndPositionsEnum.OLD_NULL_SEMANTICS);
         return null;

@@ -54,6 +54,7 @@ import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
+import org.apache.solr.common.params.CommonAdminParams;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -67,6 +68,7 @@ import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.DirectoryFactory;
 import org.apache.solr.core.DirectoryFactory.DirContext;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.core.SolrResourceLoader;
 import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
@@ -164,7 +166,7 @@ public class CoreAdminHandler extends RequestHandlerBase {
               "Core container instance missing");
     }
     //boolean doPersist = false;
-    String taskId = req.getParams().get("async");
+    final String taskId = req.getParams().get(CommonAdminParams.ASYNC);
     TaskObject taskObject = new TaskObject(taskId);
 
     if(taskId != null) {
@@ -311,9 +313,38 @@ public class CoreAdminHandler extends RequestHandlerBase {
             log.warn("zkController is null in CoreAdminHandler.handleRequestInternal:REJOINLEADERELCTIONS. No action taken.");
           }
           break;
+        case INVOKE:
+          handleInvoke(req, rsp);
+          break;
       }
     }
     rsp.setHttpCaching(false);
+  }
+
+  public void handleInvoke(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
+    String[] klas = req.getParams().getParams("class");
+    if (klas == null || klas.length == 0) {
+      throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, "class is a required param");
+    }
+    for (String c : klas) {
+      Map<String, Object> result = invokeAClass(req, c);
+      rsp.add(c, result);
+    }
+
+  }
+
+  private Map<String, Object> invokeAClass(SolrQueryRequest req, String c) {
+    SolrResourceLoader loader = null;
+    if (req.getCore() != null) loader = req.getCore().getResourceLoader();
+    else if (req.getContext().get(CoreContainer.class.getName()) != null) {
+      CoreContainer cc = (CoreContainer) req.getContext().get(CoreContainer.class.getName());
+      loader = cc.getResourceLoader();
+    }
+
+    Invocable invokable = loader.newInstance(c, Invocable.class);
+    Map<String, Object> result = invokable.invoke(req);
+    log.info("Invocable_invoked {}", result);
+    return result;
   }
 
 
@@ -735,7 +766,7 @@ public class CoreAdminHandler extends RequestHandlerBase {
     SolrParams params = req.getParams();
     String cname = params.get(CoreAdminParams.CORE);
 
-    if(!coreContainer.getCoreNames().contains(cname)) {
+    if (cname == null || !coreContainer.getCoreNames().contains(cname)) {
       throw new SolrException(ErrorCode.BAD_REQUEST, "Core with core name [" + cname + "] does not exist.");
     }
 
@@ -916,7 +947,7 @@ public class CoreAdminHandler extends RequestHandlerBase {
                   waitForState + "; forcing ClusterState update from ZooKeeper");
             
             // force a cluster state update
-            coreContainer.getZkController().getZkStateReader().updateClusterState(true);
+            coreContainer.getZkController().getZkStateReader().updateClusterState();
           }
 
           if (maxTries == 0) {
@@ -1314,5 +1345,12 @@ public class CoreAdminHandler extends RequestHandlerBase {
   public void shutdown() {
     if (parallelExecutor != null && !parallelExecutor.isShutdown())
       ExecutorUtil.shutdownAndAwaitTermination(parallelExecutor);
+  }
+
+  /**
+   * used by the INVOKE action of core admin handler
+   */
+  public static interface Invocable {
+    public Map<String, Object> invoke(SolrQueryRequest req);
   }
 }
