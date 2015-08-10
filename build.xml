@@ -243,7 +243,7 @@
       <outputproperty name="indent" value="yes"/>
       <param name="netbeans.fileset.sourcefolders" expression="${netbeans.fileset.sourcefolders}"/>
       <param name="netbeans.path.libs" expression="${netbeans.path.libs}"/>
-      <param name="netbeans.source-level" expression="1.7"/>
+      <param name="netbeans.source-level" expression="1.8"/>
     </xslt>
   </target>
 
@@ -330,7 +330,7 @@ following two XML attributes/values (adjust values according to
 JDKs you have defined locally - see 
 File | Project Structure | Platform Settings | SDKs):
 
-    idea.jdk = project-jdk-name="1.7" project-jdk-type="JavaSDK"
+    idea.jdk = project-jdk-name="1.8" project-jdk-type="JavaSDK"
     </echo>
   </target>
 
@@ -387,9 +387,9 @@ File | Project Structure | Platform Settings | SDKs):
 
   <target name="nightly-smoke" description="Builds an unsigned release and smoke tests it (pass '-DsmokeTestRelease.java8=/path/to/jdk1.8.0' to additionally test with Java 8)"
     depends="clean,-nightly-smoke-java8params">
-    <fail message="To run nightly smoke, the JDK must be exactly Java 1.7, was: ${java.specification.version}">
+    <fail message="To run nightly smoke, the JDK must be exactly Java 1.8, was: ${java.specification.version}">
       <condition>
-        <not><equals arg1="${java.specification.version}" arg2="1.7"/></not>
+        <not><equals arg1="${java.specification.version}" arg2="1.8"/></not>
       </condition>
     </fail>
     <property name="-smokeTestRelease.java8params" value=""/><!-- (if not yet defined) -->

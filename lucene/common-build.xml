@@ -163,8 +163,8 @@
 
   <property name="javac.deprecation" value="off"/>
   <property name="javac.debug" value="on"/>
-  <property name="javac.source" value="1.7"/>
-  <property name="javac.target" value="1.7"/>
+  <property name="javac.source" value="1.8"/>
+  <property name="javac.target" value="1.8"/>
   <property name="javac.args" value="-Xlint -Xlint:-deprecation -Xlint:-serial -Xlint:-options"/>
   <property name="javadoc.link" value="http://download.oracle.com/javase/7/docs/api/"/>
   <property name="javadoc.link.junit" value="http://junit.sourceforge.net/javadoc/"/>
@@ -309,7 +309,7 @@
     </condition>
   </fail>
 
-  <fail message="Minimum supported Java version is 1.7.">
+  <fail message="Minimum supported Java version is 1.8.">
     <condition>
       <not><hasmethod classname="java.lang.Throwable" method="getSuppressed"/></not>
     </condition>
@@ -337,7 +337,6 @@
    -->
   <condition property="build.java.runtime" value="${-cleaned.specification.version}" else="unknown">
     <or>
-      <equals arg1="${-cleaned.specification.version}" arg2="1.7"/>
       <equals arg1="${-cleaned.specification.version}" arg2="1.8"/>
       <equals arg1="${-cleaned.specification.version}" arg2="1.9"/>
     </or>
@@ -356,7 +355,7 @@
         <contains string="${java.vm.name}" substring="jrockit" casesensitive="false"/>
       </or>
       <or>
-        <equals arg1="${build.java.runtime}" arg2="1.7"/>
+        <equals arg1="${build.java.runtime}" arg2="1.8"/>
         <equals arg1="${build.java.runtime}" arg2="1.8"/>
       </or>
       <!-- TODO: Fix this! For now only run this on 64bit, because jTIDY OOMs with default heap size: -->
@@ -365,10 +364,10 @@
   </condition>
 
   <!-- workaround for https://issues.apache.org/bugzilla/show_bug.cgi?id=53347 -->
-  <condition property="build.compiler" value="javac1.7">
+  <condition property="build.compiler" value="javac1.8">
     <and>
       <not>
-        <equals arg1="${build.java.runtime}" arg2="1.7"/>
+        <equals arg1="${build.java.runtime}" arg2="1.8"/>
       </not>
       <or>
         <antversion exactly="1.8.3" />
@@ -388,10 +387,10 @@
 
   <!-- enable doclint only on JDK 8+ (disable on Java 7, so its inverse): -->
   <condition property="-javadoc.doclint.args" value="" else="${javadoc.doclint.args}">
-    <equals arg1="${build.java.runtime}" arg2="1.7"/>
+    <equals arg1="${build.java.runtime}" arg2="1.8"/>
   </condition>
   <condition property="-javac.doclint.args" value="" else="${javac.doclint.args}">
-    <equals arg1="${build.java.runtime}" arg2="1.7"/>
+    <equals arg1="${build.java.runtime}" arg2="1.8"/>
   </condition>
 
   <!-- Import custom ANT tasks. -->
@@ -930,7 +929,7 @@
             <value><!-- empty/ default encoding. --></value>
 
             <!--
-            Disabled because of Java 1.7 bug on Linux/ Unix:
+            Disabled because of Java 1.8 bug on Linux/ Unix:
             http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7181721
 
             <value>UTF-16</value>     
@@ -1894,7 +1893,7 @@ ${ant.project.name}.test.dependencies=${test.classpath.list}
   
   <condition property="ecj-javadoc-lint.supported">
     <or>
-      <equals arg1="${build.java.runtime}" arg2="1.7"/>
+      <equals arg1="${build.java.runtime}" arg2="1.8"/>
       <equals arg1="${build.java.runtime}" arg2="1.8"/>
     </or>
   </condition>
@@ -1992,7 +1991,7 @@ ${ant.project.name}.test.dependencies=${test.classpath.list}
     </sequential>
   </macrodef>
 
-  <property name="failonjavadocwarning" value="true"/>
+  <property name="failonjavadocwarning" value="false"/>
   <macrodef name="invoke-javadoc">
     <element name="sources" optional="yes"/>
     <attribute name="destdir"/>
@@ -2365,7 +2364,7 @@ ${ant.project.name}.test.dependencies=${test.classpath.list}
   <property name="forbidden-sysout-excludes" value=""/>
   
   <target name="-install-forbidden-apis" unless="forbidden-apis.loaded" depends="ivy-availability-check,ivy-configure">
-    <ivy:cachepath organisation="de.thetaphi" module="forbiddenapis" revision="1.7"
+    <ivy:cachepath organisation="de.thetaphi" module="forbiddenapis" revision="1.8"
       inline="true" conf="default" transitive="true" pathid="forbidden-apis.classpath"/>
     <taskdef name="forbidden-apis" classname="de.thetaphi.forbiddenapis.AntTask" classpathref="forbidden-apis.classpath"/>
     <property name="forbidden-apis.loaded" value="true"/>
