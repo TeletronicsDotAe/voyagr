@@ -25,9 +25,9 @@
   
   <property name="Name" value="Solr" />
   
-  <!-- solr uses 1.8 -->
-  <property name="javac.source" value="1.8"/>
-  <property name="javac.target" value="1.8"/>
+  <!-- solr uses 1.7 -->
+  <property name="javac.source" value="1.7"/>
+  <property name="javac.target" value="1.7"/>
   <property name="javac.args" value=""/>
   
   <property name="dest" location="${common-solr.dir}/build" />
@@ -149,7 +149,7 @@
   -->
   <condition property="tests.disableHdfs" value="true">
     <or>
-      <equals arg1="${build.java.runtime}" arg2="1.8"/>
+      <equals arg1="${build.java.runtime}" arg2="1.7"/>
       <os family="windows"/>
     </or>
   </condition>
