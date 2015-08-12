@@ -351,14 +351,8 @@ public class FacetComponent extends SearchComponent {
           // set the initial limit higher to increase accuracy
           dff.initialLimit = doOverRequestMath(dff.initialLimit, dff.overrequestRatio, 
                                                dff.overrequestCount);
-          dff.initialMincount = 0; // TODO: we could change this to 1, but would
-                                   // then need more refinement for small facet
-                                   // result sets?
-        } else {
-          // if limit==-1, then no need to artificially lower mincount to 0 if
-          // it's 1
-          dff.initialMincount = Math.min(dff.minCount, 1);
         }
+        dff.initialMincount = Math.min(dff.minCount, 1);
       } else {
         // we're sorting by index order.
         // if minCount==0, we should always be able to get accurate results w/o
