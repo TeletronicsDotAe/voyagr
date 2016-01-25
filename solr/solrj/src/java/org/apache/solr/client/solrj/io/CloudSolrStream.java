@@ -169,7 +169,7 @@ public class CloudSolrStream extends TupleStream {
       ClusterState clusterState = zkStateReader.getClusterState();
       //System.out.println("Connected to zk an got cluster state.");
 
-      Collection<Slice> slices = clusterState.getActiveSlices(this.collection);
+      Collection<Slice> slices = getActiveSlices(clusterState);
       long time = System.currentTimeMillis();
       params.put("distrib","false"); // We are the aggregator.
 
@@ -195,6 +195,15 @@ public class CloudSolrStream extends TupleStream {
     } catch (Exception e) {
       throw new IOException(e);
     }
+  }
+
+  /**
+   * Allow overriding this method to be able to use multiple collections.
+   * @param clusterState ClusterState
+   * @return A collection of active slices
+   */
+  protected Collection<Slice> getActiveSlices(ClusterState clusterState) {
+    return clusterState.getActiveSlices(this.collection);
   }
 
   private void openStreams() throws IOException {
